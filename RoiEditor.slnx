@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="RoiEditor.csproj" Id="b30e1e90-d4b8-4919-8c7b-a57891d0d61e" />
+  <Project Path="SelectRoiWindows/SelectRoiWindows.csproj" Id="c374969c-b0ca-49ce-875d-640d7fe3cfd1" />
+</Solution>
