@@ -7,7 +7,10 @@ namespace RoiEditor.Core.Interaction
     public class SelectTool : ToolBase
     {
         private bool _isDragging;
+        private bool _isMouseDown;
         private Point _lastMouseWorld;
+        private Point _dragStartScreen;
+        private const double DRAG_THRESHOLD = 1.0;
 
         public SelectTool(Controls.RoiEditorCanvas canvas) : base(canvas) { }
 
@@ -18,6 +21,9 @@ namespace RoiEditor.Core.Interaction
 
         public override void OnMouseDown(MouseButtonEventArgs e)
         {
+            _isMouseDown = true;
+            _dragStartScreen = e.GetPosition(_canvas);
+
             var wPos = GetWorldPosition(e);
             _lastMouseWorld = wPos;
 
@@ -27,8 +33,10 @@ namespace RoiEditor.Core.Interaction
             if (hit != null)
             {
                 // 选中逻辑
-                _canvas.SelectRoi(hit); // 这一步设置 SelectedRoi 并重绘
-                _isDragging = true;
+               if (_canvas.SelectedRoi != hit)
+                {
+                    _canvas.SelectRoi(hit);
+                }
                 _canvas.CaptureMouse();
             }
             else
@@ -41,19 +49,30 @@ namespace RoiEditor.Core.Interaction
         {
             var wPos = GetWorldPosition(e);
 
-            if (_isDragging && _canvas.SelectedRoi != null)
+            if (_isMouseDown && _canvas.SelectedRoi != null)
             {
-                var delta = wPos - _lastMouseWorld;
 
-                // 移动 ROI 的所有点
-                var roi = _canvas.SelectedRoi;
-                for (int i = 0; i < roi.Points.Count; i++)
+                // 如果还没进入拖拽状态，先检查距离
+                if (!_isDragging)
                 {
-                    roi.Points[i] += delta;
+                    var curScreen = e.GetPosition(_canvas);
+                    if ((curScreen - _dragStartScreen).Length > DRAG_THRESHOLD)
+                    {
+                        _isDragging = true; // 超过阈值，正式确认为拖拽
+                    }
                 }
 
-                // 只重绘编辑层，性能高
-                _canvas.RedrawEditorLayer();
+                // 如果确认为拖拽，则执行移动逻辑
+                if (_isDragging)
+                {
+                    var delta = wPos - _lastMouseWorld;
+                    var roi = _canvas.SelectedRoi;
+                    for (int i = 0; i < roi.Points.Count; i++)
+                    {
+                        roi.Points[i] += delta;
+                    }
+                    _canvas.RedrawEditorLayer();
+                }
             }
             else
             {
@@ -70,13 +89,19 @@ namespace RoiEditor.Core.Interaction
 
         public override void OnMouseUp(MouseButtonEventArgs e)
         {
+            _isMouseDown = false;
+
             if (_isDragging)
             {
                 _isDragging = false;
                 _canvas.ReleaseMouseCapture();
-
-                // 拖拽结束，重建索引 (P0 级优化)
-                _canvas.RebuildSpatialIndex();
+                _canvas.RebuildSpatialIndex(); // 拖拽结束重建索引
+            }
+            else
+            {
+                // 是点击事件（未发生拖拽）：确保释放捕获
+                if (_canvas.IsMouseCaptured)
+                    _canvas.ReleaseMouseCapture();
             }
         }
     }
