@@ -13,6 +13,7 @@ namespace RoiEditor.Models
     public class RoiItem : PropertyChangedBase
     {
         private bool _isSelected;
+        private bool _isEditing;
         private List<Point> _points;
         private Color _color = Colors.Yellow;
 
@@ -36,8 +37,24 @@ namespace RoiEditor.Models
         public bool IsSelected
         {
             get => _isSelected;
-            set { _isSelected = value; NotifyOfPropertyChange(() => IsSelected); }
+            set 
+            { 
+                _isSelected = value;
+                if (!_isSelected) IsEditing = false;
+                NotifyOfPropertyChange(() => IsSelected);
+            }
         }
+
+        public bool IsEditing
+        {
+            get { return _isEditing; }
+            set 
+            { 
+                _isEditing = value;
+                NotifyOfPropertyChange(() => IsEditing);
+            }
+        }
+
 
         // 辅助：获取中心点
         public Point Center

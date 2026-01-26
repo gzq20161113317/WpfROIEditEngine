@@ -19,6 +19,17 @@ namespace RoiEditor.Core.Rendering
         private const double HOVER_THICKNESS = 3.0;
         private const double FILL_OPACITY = 0.2;
 
+        //手柄样式(Screen Space)
+        private double HANDLE_SIZE = 8.0;//手柄大小8x8像素
+        private readonly SolidColorBrush _handleFill = Brushes.White;
+        private readonly Pen _handlePen = new Pen(Brushes.Black,1.0);
+
+        public RoiRenderer()
+        {
+            if(_handlePen.CanFreeze)
+                _handlePen.Freeze();
+        }
+
         /// <summary>
         /// 绘制静态层 (所有未选中的 ROI)
         /// </summary>
@@ -72,7 +83,7 @@ namespace RoiEditor.Core.Rendering
         }
 
         /// <summary>
-        /// 绘制编辑层 (当前选中的 ROI)
+        /// 绘制编辑层:虚线框 + 8点手柄
         /// </summary>
         public void DrawEditorLayer(DrawingContext dc, RoiItem activeItem, Matrix matrix)
         {
@@ -85,7 +96,7 @@ namespace RoiEditor.Core.Rendering
 
             // 选中态样式：虚线、青色边框
             var fill = new SolidColorBrush(activeItem.Color) { Opacity = 0.25 };
-            var pen = new Pen(Brushes.Cyan, 2.0) // 屏幕空间下，线宽固定为 2 即可
+            var pen = new Pen(Brushes.Cyan, 1.0) // 屏幕空间下，线宽固定为 2 即可
             {
                 DashStyle = new DashStyle(new double[] { 4, 4 }, 0), // 虚线
             };
@@ -95,8 +106,46 @@ namespace RoiEditor.Core.Rendering
 
             dc.DrawGeometry(fill, pen, geom);
 
-            // 未来可以在这里画 8 个调节手柄 (Resize Handles)
-            // DrawHandles(dc, screenPts);
+            if (!activeItem.IsEditing)
+                return;
+
+            //3.绘制8点控制手柄
+            //获取屏幕空间的包围盒
+            Rect bounds = geom.Bounds;
+
+            double minDimension = Math.Min(bounds.Width, bounds.Height);
+            double dynamicSize = Math.Min(HANDLE_SIZE, minDimension / 6.0);
+
+            // 为了美观，限制最小显示尺寸，如果太小干脆就不画了（比如小于 2 像素）
+            if (dynamicSize < 2.0) return;
+
+            double halfSize = dynamicSize / 2;
+
+            // 重新定义画笔，确保线宽适应小手柄 (如果手柄很小，线宽改细一点)
+            Pen handlePen = _handlePen;
+            if (dynamicSize < 4.0)
+            {
+                handlePen = new Pen(Brushes.Black, 0.5); // 极小手柄用细线
+                handlePen.Freeze();
+            }
+
+            //计算8点位置
+            Point[] handles = new Point[8];
+            handles[0] = bounds.TopLeft;//TopLeft
+            handles[1] = new Point(bounds.X + bounds.Width/2,bounds.Top);// Top
+            handles[2] = bounds.TopRight;
+            handles[3] = new Point(bounds.Right,bounds.Y + bounds.Height / 2);//Right
+            handles[4] = bounds.BottomRight;
+            handles[5] = new Point(bounds.X + bounds.Width / 2,bounds.Bottom);//Bottom
+            handles[6] = bounds.BottomLeft;
+            handles[7] = new Point(bounds.Left, bounds.Y + bounds.Height / 2);  // Left
+
+            foreach (var p in handles)
+            {
+                // 手柄是正方形，居中绘制
+                Rect r = new Rect(p.X - halfSize, p.Y - halfSize, HANDLE_SIZE, HANDLE_SIZE);
+                dc.DrawRectangle(_handleFill, _handlePen, r);
+            }
         }
 
         // 辅助方法：构建几何图形

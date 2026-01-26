@@ -16,10 +16,10 @@ namespace RoiEditor.Core.IO
     /// </summary>
     public class TileLoader
     {
-        private readonly LruCache<string, BitmapSource> _memoryCache = new LruCache<string, BitmapSource>(800);
+        private readonly LruCache<string, BitmapSource> _memoryCache = new LruCache<string, BitmapSource>(2000);
         private readonly SemaphoreSlim _loadGate;
 
-        public TileLoader(int maxConcurrency = 6)
+        public TileLoader(int maxConcurrency = 8)
         {
             _loadGate = new SemaphoreSlim(maxConcurrency, maxConcurrency);
         }

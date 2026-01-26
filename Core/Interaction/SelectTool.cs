@@ -37,6 +37,16 @@ namespace RoiEditor.Core.Interaction
                 {
                     _canvas.SelectRoi(hit);
                 }
+
+                bool isAltPressed = Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
+                bool isDoubleClick = e.ClickCount == 2;
+
+                if(isDoubleClick || isAltPressed)
+                {
+                    hit.IsEditing = true;
+                    _canvas.RedrawEditorLayer();
+                }
+
                 _canvas.CaptureMouse();
             }
             else
