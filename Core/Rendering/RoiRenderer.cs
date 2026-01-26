@@ -20,8 +20,10 @@ namespace RoiEditor.Core.Rendering
         private const double FILL_OPACITY = 0.2;
 
         //手柄样式(Screen Space)
-        private double HANDLE_SIZE = 8.0;//手柄大小8x8像素
-        private readonly SolidColorBrush _handleFill = Brushes.White;
+        public const double HANDLE_SIZE = 6.0;//手柄大小6x6像素
+        private const double MIN_ROI_SIZE_FOR_HANDLE = 15.0;//最小显示阈值
+
+        private readonly SolidColorBrush _handleFill = new SolidColorBrush(Color.FromArgb(200, 255, 255, 255)); // 200/255 透明度
         private readonly Pen _handlePen = new Pen(Brushes.Black,1.0);
 
         public RoiRenderer()
@@ -113,39 +115,68 @@ namespace RoiEditor.Core.Rendering
             //获取屏幕空间的包围盒
             Rect bounds = geom.Bounds;
 
+            // === 核心修改：调用静态方法获取 8 个手柄的矩形 ===
+            var handleRects = GetHandleRects(bounds);
+
+            // 如果返回空，说明太小不该画
+            if (handleRects == null) return;
+
+            double handleSize = handleRects[0].Width;
+            Pen currentHandlePen = _handlePen;
+            if(handleSize < 4.0)
+            {
+                currentHandlePen = new Pen(Brushes.Black,0.5);
+                currentHandlePen.Freeze();
+            }
+
+            foreach(var r in handleRects)
+            {
+                dc.DrawRectangle(_handleFill,currentHandlePen,r);
+            }
+        }
+
+
+        public static double CalculateHandleSize(Rect bounds)
+        {
+            if (bounds.Width < MIN_ROI_SIZE_FOR_HANDLE || bounds.Height < MIN_ROI_SIZE_FOR_HANDLE)
+                return 0;
+
             double minDimension = Math.Min(bounds.Width, bounds.Height);
-            double dynamicSize = Math.Min(HANDLE_SIZE, minDimension / 6.0);
 
-            // 为了美观，限制最小显示尺寸，如果太小干脆就不画了（比如小于 2 像素）
-            if (dynamicSize < 2.0) return;
+            // 2. 修改动态比例
+            // 原来是 / 3.0，改为 / 4.0 或 / 5.0
+            // 意味着：物体必须更大，手柄才能达到最大值。物体较小时，手柄会显得更克制。
+            double dynamicSize = Math.Min(HANDLE_SIZE, minDimension / 4.0);
 
-            double halfSize = dynamicSize / 2;
+            // 最小显示尺寸也可以稍微降一点点
+            return dynamicSize < 2.0 ? 0 : dynamicSize;
+        }
 
-            // 重新定义画笔，确保线宽适应小手柄 (如果手柄很小，线宽改细一点)
-            Pen handlePen = _handlePen;
-            if (dynamicSize < 4.0)
+        public static List<Rect> GetHandleRects(Rect bounds)
+        {
+            double size = CalculateHandleSize(bounds);
+
+            if (size <= 0) return null;
+
+            double half = size / 2.0;
+
+            // ... 生成 8 个点 ...
+            Point[] centers = new Point[8];
+            centers[0] = bounds.TopLeft;
+            centers[1] = new Point(bounds.X + bounds.Width / 2, bounds.Top);
+            centers[2] = bounds.TopRight;
+            centers[3] = new Point(bounds.Right, bounds.Y + bounds.Height / 2);
+            centers[4] = bounds.BottomRight;
+            centers[5] = new Point(bounds.X + bounds.Width / 2, bounds.Bottom);
+            centers[6] = bounds.BottomLeft;
+            centers[7] = new Point(bounds.Left, bounds.Y + bounds.Height / 2);
+
+            var rects = new List<Rect>(8);
+            foreach (var p in centers)
             {
-                handlePen = new Pen(Brushes.Black, 0.5); // 极小手柄用细线
-                handlePen.Freeze();
+                rects.Add(new Rect(p.X - half, p.Y - half, size, size));
             }
-
-            //计算8点位置
-            Point[] handles = new Point[8];
-            handles[0] = bounds.TopLeft;//TopLeft
-            handles[1] = new Point(bounds.X + bounds.Width/2,bounds.Top);// Top
-            handles[2] = bounds.TopRight;
-            handles[3] = new Point(bounds.Right,bounds.Y + bounds.Height / 2);//Right
-            handles[4] = bounds.BottomRight;
-            handles[5] = new Point(bounds.X + bounds.Width / 2,bounds.Bottom);//Bottom
-            handles[6] = bounds.BottomLeft;
-            handles[7] = new Point(bounds.Left, bounds.Y + bounds.Height / 2);  // Left
-
-            foreach (var p in handles)
-            {
-                // 手柄是正方形，居中绘制
-                Rect r = new Rect(p.X - halfSize, p.Y - halfSize, HANDLE_SIZE, HANDLE_SIZE);
-                dc.DrawRectangle(_handleFill, _handlePen, r);
-            }
+            return rects;
         }
 
         // 辅助方法：构建几何图形
