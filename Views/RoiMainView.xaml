@@ -68,20 +68,20 @@
                         <TextBlock Text="MODE:" Foreground="Gray" FontSize="11" Margin="0,0,6,0"/>
                         <TextBlock Text="{Binding CurrentMode}" Foreground="Cyan" FontWeight="Bold" Margin="0,0,14,0"/>
 
-                        <TextBlock Text="{Binding RoiList.Count, StringFormat='ROIs: {0}'}" Foreground="White" FontSize="11" />
+                        <TextBlock Text="{Binding ROIRegionList.Count, StringFormat='ROIs: {0}'}" Foreground="White" FontSize="11" />
                     </StackPanel>
                 </DockPanel>
             </Border>
 
             <!-- RoiEditorCanvas (Row 1) -->
             <controls:RoiEditorCanvas Grid.Row="1"
-                                      ItemsSource="{Binding RoiList}"
+                                      ItemsSource="{Binding ROIRegionList}"
                                       Mode="{Binding CurrentMode}"
                                       MapPath="{Binding MapPath}"
                                       MaxLevel="{Binding MaxLevel, Mode=OneWayToSource}" 
                                       CurrentLevel="{Binding CurrentLevel, Mode=OneWayToSource}"
                                       EventAggregator="{Binding EventAggregator}"
-                                      SelectedRoi="{Binding SelectedRoi, Mode=TwoWay}"
+                                      SelectedROIRegion="{Binding SelectedROIRegion, Mode=TwoWay}"
                                       Background="#1E1E1E"/>
             <StatusBar Grid.Row="2">
                 <StatusBarItem>
@@ -115,8 +115,8 @@
 
                     <!-- 你可以用 ListBox / DataGrid / ListView，这里用 ListBox 最简单 -->
                     <ListBox Grid.Row="1"
-                             ItemsSource="{Binding RoiList}"
-                             SelectedItem="{Binding SelectedRoi, Mode=TwoWay}"
+                             ItemsSource="{Binding ROIRegionList}"
+                             SelectedItem="{Binding SelectedROIRegion, Mode=TwoWay}"
                              Background="#1E1E1E"
                              BorderBrush="#3F3F46"
                              Foreground="White">
@@ -154,7 +154,7 @@
                             CornerRadius="4"
                             Padding="10">
                         <StackPanel>
-                            <TextBlock Text="{Binding SelectedRoi.Name, StringFormat='Selected: {0}'}"
+                            <TextBlock Text="{Binding SelectedROIRegion.Name, StringFormat='Selected: {0}'}"
                                        Foreground="White" FontSize="12" Margin="0,0,0,6"/>
                             <TextBlock Text="（这里后续放 ROI/Region 参数、测量结果、属性编辑等）"
                                        Foreground="Gray" FontSize="12" TextWrapping="Wrap"/>

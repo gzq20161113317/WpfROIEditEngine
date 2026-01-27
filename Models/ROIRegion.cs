@@ -10,7 +10,7 @@ using System.Windows.Media;
 
 namespace RoiEditor.Models
 {
-    public class RoiItem : PropertyChangedBase
+    public class ROIRegion : PropertyChangedBase
     {
         private bool _isSelected;
         private bool _isEditing;
@@ -20,9 +20,9 @@ namespace RoiEditor.Models
         public int Id { get; set; }
         public string Name { get; set; }
 
-        private RoiType _type;
+        private ROIRegionType _type;
 
-        public RoiType Type
+        public ROIRegionType Type
         {
             get { return _type; }
             set 

@@ -10,7 +10,7 @@ namespace RoiEditor.Core.Interaction
 {
     public class CreateRectTool : ToolBase
     {
-        private RoiItem _newItem;
+        private ROIRegion _newItem;
         private Point _startPoint;
 
         public CreateRectTool(Controls.RoiEditorCanvas canvas) : base(canvas) { }
@@ -24,11 +24,11 @@ namespace RoiEditor.Core.Interaction
         {
             _startPoint = GetWorldPosition(e);
 
-            _newItem = new RoiItem
+            _newItem = new ROIRegion
             {
                 Name = "New Region",
                 Color = Colors.Lime,
-                Type = RoiType.Rectangle,
+                Type = ROIRegionType.Rectangle,
                 Points = new List<Point> { _startPoint, _startPoint, _startPoint, _startPoint }
             };
 
@@ -39,7 +39,7 @@ namespace RoiEditor.Core.Interaction
             //2.选中它(IsSelected = true)
             //此时因为IsEditing还是false，所以屏幕上只会显示青色虚线框，不会显示手柄
             //这符合预期：拖拽过程中不需要看手柄
-            _canvas.SelectRoi(_newItem);
+            _canvas.SelectROIRegion(_newItem);
 
             _canvas.CaptureMouse();
         }

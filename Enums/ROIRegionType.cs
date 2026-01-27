@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace RoiEditor.Enums
 {
-    public enum RoiType
+    public enum ROIRegionType
     {
         Rectangle, //矩形（4点：TL,TR,BR,BL）
         Polygon,//多边形（N点）

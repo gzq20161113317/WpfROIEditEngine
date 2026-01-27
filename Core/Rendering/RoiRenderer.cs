@@ -35,7 +35,7 @@ namespace RoiEditor.Core.Rendering
         /// <summary>
         /// 绘制静态层 (所有未选中的 ROI)
         /// </summary>
-        public void DrawStaticLayer(DrawingContext dc, IEnumerable<RoiItem> items, RoiItem hoverItem, double currentZoom)
+        public void DrawStaticLayer(DrawingContext dc, IEnumerable<ROIRegion> items, ROIRegion hoverItem, double currentZoom)
         {
             if (items == null) return;
 
@@ -87,7 +87,7 @@ namespace RoiEditor.Core.Rendering
         /// <summary>
         /// 绘制编辑层:虚线框 + 8点手柄
         /// </summary>
-        public void DrawEditorLayer(DrawingContext dc, RoiItem activeItem, Matrix matrix)
+        public void DrawEditorLayer(DrawingContext dc, ROIRegion activeItem, Matrix matrix)
         {
             // 1. 基础检查
             if (activeItem == null || activeItem.Points == null || activeItem.Points.Count < 2) return;
@@ -189,7 +189,7 @@ namespace RoiEditor.Core.Rendering
 
 
 
-        public static StreamGeometry BuildGeometry(RoiItem item)
+        public static StreamGeometry BuildGeometry(ROIRegion item)
         {
             var pts = item?.Points;
             if (pts == null || pts.Count < 2) return null;
@@ -199,8 +199,8 @@ namespace RoiEditor.Core.Rendering
             {
                 switch (item.Type)
                 {
-                    case Enums.RoiType.Rectangle:
-                    case Enums.RoiType.Polygon:
+                    case Enums.ROIRegionType.Rectangle:
+                    case Enums.ROIRegionType.Polygon:
                         {
                             if (pts.Count < 3) break;
 
@@ -209,7 +209,7 @@ namespace RoiEditor.Core.Rendering
                             break;
                         }
 
-                    case Enums.RoiType.Circle:
+                    case Enums.ROIRegionType.Circle:
                         {
                             if (pts.Count < 2) break;
 
@@ -233,7 +233,7 @@ namespace RoiEditor.Core.Rendering
                             break;
                         }
 
-                    case Enums.RoiType.Bezier:
+                    case Enums.ROIRegionType.Bezier:
                         {
                             if (pts.Count < 4) break;
 

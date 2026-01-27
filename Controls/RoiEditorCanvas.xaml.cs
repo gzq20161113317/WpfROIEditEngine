@@ -39,7 +39,7 @@ namespace RoiEditor.Controls
         // Dependency Properties
         // =========================
         public static readonly DependencyProperty ItemsSourceProperty = DependencyProperty.Register(
-            nameof(ItemsSource), typeof(IObservableCollection<RoiItem>), typeof(RoiEditorCanvas),
+            nameof(ItemsSource), typeof(IObservableCollection<ROIRegion>), typeof(RoiEditorCanvas),
             new PropertyMetadata(null, OnItemsSourceChanged));
 
         public static readonly DependencyProperty ModeProperty = DependencyProperty.Register(
@@ -50,9 +50,9 @@ namespace RoiEditor.Controls
             nameof(MapPath), typeof(string), typeof(RoiEditorCanvas),
             new PropertyMetadata(null, OnMapPathChanged));
 
-        public static readonly DependencyProperty SelectedRoiProperty = DependencyProperty.Register(
-            nameof(SelectedRoi), typeof(RoiItem), typeof(RoiEditorCanvas),
-            new PropertyMetadata(null, OnSelectedRoiChanged));
+        public static readonly DependencyProperty SelectedROIRegionProperty = DependencyProperty.Register(
+            nameof(SelectedROIRegion), typeof(ROIRegion), typeof(RoiEditorCanvas),
+            new PropertyMetadata(null, OnSelectedROIRegionChanged));
 
         public static readonly DependencyProperty EventAggregatorProperty = DependencyProperty.Register(
             nameof(EventAggregator), typeof(IEventAggregator), typeof(RoiEditorCanvas),
@@ -82,9 +82,9 @@ namespace RoiEditor.Controls
             set => SetValue(CurrentLevelProperty, value);
         }
 
-        public IObservableCollection<RoiItem> ItemsSource
+        public IObservableCollection<ROIRegion> ItemsSource
         {
-            get => (IObservableCollection<RoiItem>)GetValue(ItemsSourceProperty);
+            get => (IObservableCollection<ROIRegion>)GetValue(ItemsSourceProperty);
             set => SetValue(ItemsSourceProperty, value);
         }
 
@@ -100,10 +100,10 @@ namespace RoiEditor.Controls
             set => SetValue(MapPathProperty, value);
         }
 
-        public RoiItem SelectedRoi
+        public ROIRegion SelectedROIRegion
         {
-            get => (RoiItem)GetValue(SelectedRoiProperty);
-            set => SetValue(SelectedRoiProperty, value);
+            get => (ROIRegion)GetValue(SelectedROIRegionProperty);
+            set => SetValue(SelectedROIRegionProperty, value);
         }
 
         public IEventAggregator EventAggregator
@@ -126,10 +126,10 @@ namespace RoiEditor.Controls
         private VisualHost _staticHost;
         private VisualHost _editorHost;
 
-        private RoiItem _hoverRoi;
-        private RoiItem _activeRoi;
+        private ROIRegion _hoverROIRegion;
+        private ROIRegion _activeROIRegion;
 
-        private readonly List<RoiItem> _hitTestCache = new List<RoiItem>();
+        private readonly List<ROIRegion> _hitTestCache = new List<ROIRegion>();
 
         private DispatcherTimer _debounceTimer;
 
@@ -138,7 +138,7 @@ namespace RoiEditor.Controls
         private TilePool _tilePool;
         private readonly MapService _mapService = new MapService();
 
-        private QuadTree<RoiItem> _spatialIndex;
+        private QuadTree<ROIRegion> _spatialIndex;
 
         private IInteractionTool _currentTool;
         private Dictionary<DrawMode, IInteractionTool> _tools;
@@ -158,9 +158,9 @@ namespace RoiEditor.Controls
             SizeChanged += (s, e) => UpdateTiles();
             MouseLeave += (s, e) =>
             {
-                if (_hoverRoi != null)
+                if (_hoverROIRegion != null)
                 {
-                    _hoverRoi = null;
+                    _hoverROIRegion = null;
                     RenderStaticLayer();
                 }
             };
@@ -180,7 +180,7 @@ namespace RoiEditor.Controls
             _tools = new Dictionary<DrawMode, IInteractionTool>
             {
                 { DrawMode.Pan, new PanTool(this) },
-                { DrawMode.Select, new SelectTool(this) },
+                { DrawMode.Select, new SelectROIRegionTool(this) },
                 { DrawMode.DrawRectangle, new CreateRectTool(this) }
             };
 
@@ -232,10 +232,10 @@ namespace RoiEditor.Controls
             RenderEditorLayer();
         }
 
-        private static void OnSelectedRoiChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        private static void OnSelectedROIRegionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var c = (RoiEditorCanvas)d;
-            c.ApplyExternalSelection(e.NewValue as RoiItem);
+            c.ApplyExternalSelection(e.NewValue as ROIRegion);
         }
 
         private static void OnEventAggregatorChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -268,7 +268,7 @@ namespace RoiEditor.Controls
             _visibleTiles.Clear();
             _loadingTiles.Clear();
 
-            // ROI 空间索引：世界尺寸会变化
+            // ROIRegion 空间索引：世界尺寸会变化
             RebuildSpatialIndex();
 
             // 初始化视图：默认从最粗层开始（避免一上来冲进 Level0 高清）
@@ -534,7 +534,7 @@ namespace RoiEditor.Controls
             var visual = new DrawingVisual();
             using (var dc = visual.RenderOpen())
             {
-                _renderer.DrawStaticLayer(dc, ItemsSource, _hoverRoi, MainMatrix.Matrix.M11);
+                _renderer.DrawStaticLayer(dc, ItemsSource, _hoverROIRegion, MainMatrix.Matrix.M11);
             }
 
             _staticHost.SetVisual(visual);
@@ -543,11 +543,11 @@ namespace RoiEditor.Controls
         private void RenderEditorLayer()
         {
             var visual = new DrawingVisual();
-            if (_activeRoi != null)
+            if (_activeROIRegion != null)
             {
                 using (var dc = visual.RenderOpen())
                 {
-                    _renderer.DrawEditorLayer(dc, _activeRoi, MainMatrix.Matrix);
+                    _renderer.DrawEditorLayer(dc, _activeROIRegion, MainMatrix.Matrix);
                 }
             }
             _editorHost.SetVisual(visual);
@@ -636,19 +636,19 @@ namespace RoiEditor.Controls
             UpdateTilesWithDebounce();
         }
 
-        internal void SetHoverRoi(RoiItem item)
+        internal void SetHoverROIRegion(ROIRegion item)
         {
-            if (_hoverRoi != item)
+            if (_hoverROIRegion != item)
             {
-                _hoverRoi = item;
+                _hoverROIRegion = item;
                 RenderStaticLayer();
             }
         }
 
-        internal void SelectRoi(RoiItem item)
+        internal void SelectROIRegion(ROIRegion item)
         {
-            SetCurrentValue(SelectedRoiProperty, item);
-            _activeRoi = item;
+            SetCurrentValue(SelectedROIRegionProperty, item);
+            _activeROIRegion = item;
             RenderStaticLayer();
             RenderEditorLayer();
         }
@@ -656,7 +656,7 @@ namespace RoiEditor.Controls
         // =========================
         // Spatial Index & HitTest
         // =========================
-        private Rect GetRoiBounds(RoiItem item)
+        private Rect GetROIRegionBounds(ROIRegion item)
         {
             if (item == null || item.Points == null || item.Points.Count == 0)
                 return Rect.Empty;
@@ -693,9 +693,9 @@ namespace RoiEditor.Controls
                 worldH = h;
             }
 
-            _spatialIndex = new QuadTree<RoiItem>(
+            _spatialIndex = new QuadTree<ROIRegion>(
                 new Rect(0, 0, worldW * 1.5, worldH * 1.5),
-                GetRoiBounds,
+                GetROIRegionBounds,
                 maxObjects: 20,
                 maxLevels: 8);
 
@@ -706,21 +706,21 @@ namespace RoiEditor.Controls
             }
         }
 
-        internal RoiItem HitTestRoi(Point wPos)
+        internal ROIRegion HitTestROIRegion(Point wPos)
         {
             if (_spatialIndex == null)
-                return HitTestRoiLegacy(wPos);
+                return HitTestROIRegionLegacy(wPos);
 
             _hitTestCache.Clear();
             _spatialIndex.Query(wPos, _hitTestCache);
             if (_hitTestCache.Count == 0) return null;
 
-            RoiItem bestHit = null;
+            ROIRegion bestHit = null;
             int bestIndex = -1;
 
             foreach (var item in _hitTestCache)
             {
-                if (IsPointInRoi(item, wPos))
+                if (IsPointInROIRegion(item, wPos))
                 {
                     int index = ItemsSource.IndexOf(item);
                     if (index > bestIndex)
@@ -734,7 +734,7 @@ namespace RoiEditor.Controls
             return bestHit;
         }
 
-        private bool IsPointInRoi(RoiItem roi, Point p)
+        private bool IsPointInROIRegion(ROIRegion roi, Point p)
         {
             var geom = RoiRenderer.BuildGeometry(roi);
             if (geom.FillContains(p)) return true;
@@ -746,7 +746,7 @@ namespace RoiEditor.Controls
             return false;
         }
 
-        private RoiItem HitTestRoiLegacy(Point wPos)
+        private ROIRegion HitTestROIRegionLegacy(Point wPos)
         {
             if (ItemsSource == null) return null;
 
@@ -767,18 +767,18 @@ namespace RoiEditor.Controls
             return null;
         }
 
-        private void ApplyExternalSelection(RoiItem newSelection)
+        private void ApplyExternalSelection(ROIRegion newSelection)
         {
-            if (ReferenceEquals(_activeRoi, newSelection))
+            if (ReferenceEquals(_activeROIRegion, newSelection))
                 return;
 
-            if (_activeRoi != null) _activeRoi.IsSelected = false;
+            if (_activeROIRegion != null) _activeROIRegion.IsSelected = false;
 
-            _activeRoi = newSelection;
+            _activeROIRegion = newSelection;
 
-            if (_activeRoi != null) _activeRoi.IsSelected = true;
+            if (_activeROIRegion != null) _activeROIRegion.IsSelected = true;
 
-            _hoverRoi = null;
+            _hoverROIRegion = null;
 
             RenderStaticLayer();
             RenderEditorLayer();
@@ -889,8 +889,8 @@ namespace RoiEditor.Controls
             try { _editorHost?.SetVisual(null); } catch { }
 
             // 7) 清空运行态引用，帮助 GC
-            _hoverRoi = null;
-            _activeRoi = null;
+            _hoverROIRegion = null;
+            _activeROIRegion = null;
             _spatialIndex = null;
             _hitTestCache.Clear();
 

@@ -14,7 +14,7 @@ namespace RoiEditor.Core.Interaction
         None, Body, TopLeft, Top, TopRight, Right, BottomRight, Bottom, BottomLeft, Left
     }
 
-    public class SelectTool : ToolBase
+    public class SelectROIRegionTool : ToolBase
     {
         private DragType _dragMode = DragType.None;
         private bool _isMouseDown;
@@ -25,7 +25,7 @@ namespace RoiEditor.Core.Interaction
         //手柄命中容差(像素)
         private const double HANDLE_TOLERANCE = 2.0;
 
-        public SelectTool(Controls.RoiEditorCanvas canvas) : base(canvas) { }
+        public SelectROIRegionTool(Controls.RoiEditorCanvas canvas) : base(canvas) { }
 
         public override void OnActivated()
         {
@@ -41,9 +41,9 @@ namespace RoiEditor.Core.Interaction
             _lastMouseWorld = wPos;
 
             //1.先判断是否点中了手柄(前提：已有Region选且处于编辑模式)
-            if (_canvas.SelectedRoi != null && _canvas.SelectedRoi.IsEditing)
+            if (_canvas.SelectedROIRegion != null && _canvas.SelectedROIRegion.IsEditing)
             {
-                var handle = GetHandleUnderMouse(e.GetPosition(_canvas), _canvas.SelectedRoi);
+                var handle = GetHandleUnderMouse(e.GetPosition(_canvas), _canvas.SelectedROIRegion);
                 if(handle != DragType.None)
                 {
                     _dragMode = handle;
@@ -53,12 +53,12 @@ namespace RoiEditor.Core.Interaction
             }
 
             // 2. 如果没点中手柄，才进行常规的 ROI 命中测试
-            var hit = _canvas.HitTestRoi(wPos);
+            var hit = _canvas.HitTestROIRegion(wPos);
             if (hit != null)
             {
-                if (_canvas.SelectedRoi != hit)
+                if (_canvas.SelectedROIRegion != hit)
                 {
-                    _canvas.SelectRoi(hit);
+                    _canvas.SelectROIRegion(hit);
                     // 刚选中时不默认进入编辑模式，保持清爽
                 }
 
@@ -78,7 +78,7 @@ namespace RoiEditor.Core.Interaction
             else
             {
                 // 点空了：取消选中
-                _canvas.SelectRoi(null);
+                _canvas.SelectROIRegion(null);
                 _dragMode = DragType.None;
             }
         }
@@ -90,7 +90,7 @@ namespace RoiEditor.Core.Interaction
             var sPos = e.GetPosition(_canvas);
 
             // 1. 拖拽逻辑
-            if (_isMouseDown && _dragMode != DragType.None && _canvas.SelectedRoi != null)
+            if (_isMouseDown && _dragMode != DragType.None && _canvas.SelectedROIRegion != null)
             {
                 // 防抖判断 (仅针对 Body 移动，拉伸通常不需要防抖，因为手柄很小)
                 bool isDragging = true;
@@ -102,22 +102,22 @@ namespace RoiEditor.Core.Interaction
 
                 if (isDragging)
                 {
-                    var roi = _canvas.SelectedRoi;
+                    var region = _canvas.SelectedROIRegion;
 
                     if (_dragMode == DragType.Body)
                     {
                         // 平移
                         var delta = wPos - _lastMouseWorld;
-                        if(roi.Points != null)
+                        if(region.Points != null)
                         {
-                            for (int i = 0; i < roi.Points.Count; i++)
-                                roi.Points[i] += delta;
+                            for (int i = 0; i < region.Points.Count; i++)
+                                region.Points[i] += delta;
                         }
                     }
                     else
                     {
                         // 拉伸
-                        ResizeRoi(roi, _dragMode, wPos);
+                        ResizeROIRegion(region, _dragMode, wPos);
                     }
 
                     _canvas.RedrawEditorLayer();
@@ -140,9 +140,9 @@ namespace RoiEditor.Core.Interaction
                 _canvas.ReleaseMouseCapture();
 
                 // 拖拽/拉伸结束后，规范化矩形并重建索引
-                if (_canvas.SelectedRoi != null)
+                if (_canvas.SelectedROIRegion != null)
                 {
-                    NormalizeByType(_canvas.SelectedRoi); 
+                    NormalizeByType(_canvas.SelectedROIRegion); 
                     _canvas.RebuildSpatialIndex();
                 }
 
@@ -157,13 +157,13 @@ namespace RoiEditor.Core.Interaction
         /// <summary>
         /// 通用变形算法：支持矩形、多边形、贝塞尔曲线、圆
         /// </summary>
-        private void ResizeRoi(RoiItem item, DragType handle, Point currentWorldPos)
+        private void ResizeROIRegion(ROIRegion item, DragType handle, Point currentWorldPos)
         {
             if (item == null || item.Points == null || item.Points.Count == 0)
                 return;
 
             //1.Circle：2点定义包围盒，直接改包围盒最稳
-            if (item.Type == Enums.RoiType.Circle)
+            if (item.Type == Enums.ROIRegionType.Circle)
             {
                 ResizeCircleBBox(item,handle,currentWorldPos);
                 return;
@@ -198,7 +198,7 @@ namespace RoiEditor.Core.Interaction
             }
         }
 
-        private void ResizeCircleBBox(RoiItem item,DragType handle,Point currentWorldPos)
+        private void ResizeCircleBBox(ROIRegion item,DragType handle,Point currentWorldPos)
         {
             if (item.Points.Count < 2)
                 return;
@@ -244,17 +244,17 @@ namespace RoiEditor.Core.Interaction
             return new Rect(newLeft, newTop, newRight - newLeft, newBottom - newTop);
         }
 
-        private void NormalizeByType(RoiItem item)
+        private void NormalizeByType(ROIRegion item)
         {
             if (item == null || item.Points == null) return;
 
             switch (item.Type)
             {
-                case Enums.RoiType.Rectangle:
+                case Enums.ROIRegionType.Rectangle:
                     NormalizeRectangle(item);
                     break;
 
-                case Enums.RoiType.Circle:
+                case Enums.ROIRegionType.Circle:
                     NormalizeCircle(item);
                     break;
 
@@ -264,7 +264,7 @@ namespace RoiEditor.Core.Interaction
             }
         }
 
-        private void NormalizeRectangle(RoiItem item)
+        private void NormalizeRectangle(ROIRegion item)
         {
             if (item.Points == null || item.Points.Count < 4) return;
 
@@ -277,7 +277,7 @@ namespace RoiEditor.Core.Interaction
             item.Points[3] = r.BottomLeft;
         }
 
-        private void NormalizeCircle(RoiItem item)
+        private void NormalizeCircle(ROIRegion item)
         {
             if (item.Points == null || item.Points.Count < 2) return;
 
@@ -296,7 +296,7 @@ namespace RoiEditor.Core.Interaction
         /// <summary>
         /// 判断鼠标在哪个手柄上 (使用 Renderer 的统一算法)
         /// </summary>
-        private DragType GetHandleUnderMouse(Point screenPos, RoiItem item)
+        private DragType GetHandleUnderMouse(Point screenPos, ROIRegion item)
         {
            if(item == null) return DragType.None;
 
@@ -340,9 +340,9 @@ namespace RoiEditor.Core.Interaction
 
         private void UpdateCursor(Point screenPos)
         {
-            if (_canvas.SelectedRoi != null && _canvas.SelectedRoi.IsEditing)
+            if (_canvas.SelectedROIRegion != null && _canvas.SelectedROIRegion.IsEditing)
             {
-                var handle = GetHandleUnderMouse(screenPos, _canvas.SelectedRoi);
+                var handle = GetHandleUnderMouse(screenPos, _canvas.SelectedROIRegion);
                 switch (handle)
                 {
                     case DragType.TopLeft:

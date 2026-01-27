@@ -19,9 +19,9 @@ namespace RoiEditor.ViewModels
         private int _currentLevel;
         private int _maxLevel;
 
-        private RoiItem _selectedRoi;
+        private ROIRegion _selectedROIRegion;
 
-        public BindableCollection<RoiItem> RoiList { get; set; } = new BindableCollection<RoiItem>();
+        public BindableCollection<ROIRegion> ROIRegionList { get; set; } = new BindableCollection<ROIRegion>();
 
         // 用于界面显示的格式化字符串
         public string LevelStatusString => $"Layer: {CurrentLevel} / {MaxLevel}";
@@ -72,14 +72,14 @@ namespace RoiEditor.ViewModels
         }
 
         // 当前选中 ROI
-        public RoiItem SelectedRoi
+        public ROIRegion SelectedROIRegion
         {
-            get => _selectedRoi;
+            get => _selectedROIRegion;
             set
             {
-                if (ReferenceEquals(_selectedRoi, value)) return;
-                _selectedRoi = value;
-                NotifyOfPropertyChange(() => SelectedRoi);
+                if (ReferenceEquals(_selectedROIRegion, value)) return;
+                _selectedROIRegion = value;
+                NotifyOfPropertyChange(() => SelectedROIRegion);
             }
         }
 
