@@ -52,7 +52,7 @@ namespace RoiEditor.Core.Rendering
                 if (item == null || item.Points == null || item.Points.Count < 3) continue;
                 if (item.IsSelected) continue; // 选中的由 EditorLayer 画
 
-                var geom = BuildPolygonGeometry(item.Points);
+                var geom = BuildGeometry(item);
 
                 // 1. 准备画笔和填充
                 var brush = new SolidColorBrush(item.Color) { Opacity = FILL_OPACITY };
@@ -89,49 +89,57 @@ namespace RoiEditor.Core.Rendering
         /// </summary>
         public void DrawEditorLayer(DrawingContext dc, RoiItem activeItem, Matrix matrix)
         {
-            if (activeItem == null || activeItem.Points == null || activeItem.Points.Count < 3) return;
+            // 1. 基础检查
+            if (activeItem == null || activeItem.Points == null || activeItem.Points.Count < 2) return;
 
-            // 注意：编辑层通常是在 Screen Space (屏幕坐标系) 绘制，
-            // 所以我们需要把 World 点转为 Screen 点
-            var screenPts = activeItem.Points.Select(p => matrix.Transform(p)).ToList();
-            var geom = BuildPolygonGeometry(screenPts);
+            // 2. [关键修复] 复用通用的 BuildGeometry 方法
+            // 这样无论是圆、多边形还是贝塞尔，都能生成正确的形状
+            var worldGeom = BuildGeometry(activeItem);
+            if (worldGeom == null) return;
 
-            // 选中态样式：虚线、青色边框
+            // 3. [关键修复] 使用矩阵变换将形状从 World Space -> Screen Space
+            // 这一步能保证圆形缩放后变成椭圆，多边形正确变形，且不需要手动算点
+            var transform = new MatrixTransform(matrix);
+            var screenGeom = worldGeom.GetFlattenedPathGeometry(); // 稍微平滑一下
+            screenGeom.Transform = transform; // 应用变换
+
+            // 4. 绘制选中框 (样式：半透明底 + 青色虚线边)
             var fill = new SolidColorBrush(activeItem.Color) { Opacity = 0.25 };
-            var pen = new Pen(Brushes.Cyan, 1.0) // 屏幕空间下，线宽固定为 2 即可
+            var pen = new Pen(Brushes.Cyan, 1.0)
             {
-                DashStyle = new DashStyle(new double[] { 4, 4 }, 0), // 虚线
+                DashStyle = new DashStyle(new double[] { 4, 4 }, 0)
             };
 
             if (fill.CanFreeze) fill.Freeze();
             if (pen.CanFreeze) pen.Freeze();
 
-            dc.DrawGeometry(fill, pen, geom);
+            dc.DrawGeometry(fill, pen, screenGeom);
 
-            if (!activeItem.IsEditing)
-                return;
+            // ==========================================================
+            // 绘制手柄 (逻辑不变，但数据源变成了变换后的 screenGeom)
+            // ==========================================================
+            if (!activeItem.IsEditing) return;
 
-            //3.绘制8点控制手柄
-            //获取屏幕空间的包围盒
-            Rect bounds = geom.Bounds;
+            // 获取变换后的包围盒 (屏幕坐标)
+            Rect bounds = screenGeom.GetRenderBounds(new Pen(Brushes.Black, 0.0));
 
-            // === 核心修改：调用静态方法获取 8 个手柄的矩形 ===
+            // 调用之前提取的静态方法获取手柄位置
             var handleRects = GetHandleRects(bounds);
 
-            // 如果返回空，说明太小不该画
             if (handleRects == null) return;
 
+            // 确定手柄粗细
             double handleSize = handleRects[0].Width;
             Pen currentHandlePen = _handlePen;
-            if(handleSize < 4.0)
+            if (handleSize < 4.0)
             {
-                currentHandlePen = new Pen(Brushes.Black,0.5);
+                currentHandlePen = new Pen(Brushes.Black, 0.5);
                 currentHandlePen.Freeze();
             }
 
-            foreach(var r in handleRects)
+            foreach (var r in handleRects)
             {
-                dc.DrawRectangle(_handleFill,currentHandlePen,r);
+                dc.DrawRectangle(_handleFill, currentHandlePen, r);
             }
         }
 
@@ -179,17 +187,66 @@ namespace RoiEditor.Core.Rendering
             return rects;
         }
 
-        // 辅助方法：构建几何图形
-        public static StreamGeometry BuildPolygonGeometry(IList<Point> pts)
+
+
+        public static StreamGeometry BuildGeometry(RoiItem item)
         {
+            var pts = item?.Points;
+            if (pts == null || pts.Count < 2) return null;
+
             var g = new StreamGeometry();
             using (var ctx = g.Open())
             {
-                ctx.BeginFigure(pts[0], true, true);
-                ctx.PolyLineTo(pts.Skip(1).ToList(), true, false);
+                switch (item.Type)
+                {
+                    case Enums.RoiType.Rectangle:
+                    case Enums.RoiType.Polygon:
+                        {
+                            if (pts.Count < 3) break;
+
+                            ctx.BeginFigure(pts[0], isFilled: true, isClosed: true);
+                            ctx.PolyLineTo(pts.Skip(1).ToList(), isStroked: true, isSmoothJoin: false);
+                            break;
+                        }
+
+                    case Enums.RoiType.Circle:
+                        {
+                            if (pts.Count < 2) break;
+
+                            double rx = Math.Abs(pts[1].X - pts[0].X) / 2.0;
+                            double ry = Math.Abs(pts[1].Y - pts[0].Y) / 2.0;
+                            if (rx < 1e-6 || ry < 1e-6) break;
+
+                            Point center = new Point((pts[0].X + pts[1].X) / 2.0, (pts[0].Y + pts[1].Y) / 2.0);
+
+                            // 从右端点开始画两段半圆（ArcTo 两次闭合）
+                            Point start = new Point(center.X + rx, center.Y);
+                            Point left = new Point(center.X - rx, center.Y);
+
+                            ctx.BeginFigure(start, isFilled: true, isClosed: true);
+                            ctx.ArcTo(left, new Size(rx, ry), rotationAngle: 0,
+                                      isLargeArc: false, sweepDirection: SweepDirection.Clockwise,
+                                      isStroked: true, isSmoothJoin: false);
+                            ctx.ArcTo(start, new Size(rx, ry), rotationAngle: 0,
+                                      isLargeArc: false, sweepDirection: SweepDirection.Clockwise,
+                                      isStroked: true, isSmoothJoin: false);
+                            break;
+                        }
+
+                    case Enums.RoiType.Bezier:
+                        {
+                            if (pts.Count < 4) break;
+
+                            ctx.BeginFigure(pts[0], isFilled: true, isClosed: false);
+                            ctx.BezierTo(pts[1], pts[2], pts[3], isStroked: true, isSmoothJoin: false);
+                            break;
+                        }
+                }
             }
+
             g.Freeze();
             return g;
         }
+
     }
 }

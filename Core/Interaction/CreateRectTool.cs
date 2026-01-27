@@ -1,4 +1,5 @@
-﻿using RoiEditor.Models;
+﻿using RoiEditor.Enums;
+using RoiEditor.Models;
 using System;
 using System.Collections.Generic;
 using System.Windows;
@@ -27,12 +28,17 @@ namespace RoiEditor.Core.Interaction
             {
                 Name = "New Region",
                 Color = Colors.Lime,
+                Type = RoiType.Rectangle,
                 Points = new List<Point> { _startPoint, _startPoint, _startPoint, _startPoint }
             };
 
             // 临时添加到 Canvas 显示，但还没加到 ItemsSource (或者先加进去)
             // 简单做法：直接加到 ItemsSource
             _canvas.ItemsSource?.Add(_newItem);
+
+            //2.选中它(IsSelected = true)
+            //此时因为IsEditing还是false，所以屏幕上只会显示青色虚线框，不会显示手柄
+            //这符合预期：拖拽过程中不需要看手柄
             _canvas.SelectRoi(_newItem);
 
             _canvas.CaptureMouse();
@@ -49,6 +55,7 @@ namespace RoiEditor.Core.Interaction
             _newItem.Points[2] = new Point(wPos.X, wPos.Y);
             _newItem.Points[3] = new Point(_startPoint.X, wPos.Y);
 
+            //强制重绘编辑层（因为现在它是Selected，所以由EditorLayer负责绘制）
             _canvas.RedrawEditorLayer();
         }
 
@@ -59,11 +66,20 @@ namespace RoiEditor.Core.Interaction
                 // 规范化矩形 (处理负宽高)
                 NormalizeRectPoints(_newItem.Points);
 
-                _newItem = null;
-                _canvas.ReleaseMouseCapture();
+                _newItem.IsEditing = true;
 
                 // 新增物体，重建索引
                 _canvas.RebuildSpatialIndex();
+
+                // 4. 画完一个后，自动切回“选择工具”
+                // 除非设计是“连续画框模式”，否则切回 Select 体验更好
+                //_canvas.Mode = DrawMode.Select;
+
+                // 5. 刷新视图 (确保手柄显示出来)
+                _canvas.RedrawEditorLayer();
+
+                _newItem = null;
+                _canvas.ReleaseMouseCapture();
 
                 // 自动切回选择模式？(很多软件画完一个会自动切回，看你需求)
                 // _canvas.Mode = DrawMode.Select; 

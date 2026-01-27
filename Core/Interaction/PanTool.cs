@@ -38,7 +38,7 @@ namespace RoiEditor.Core.Interaction
 
             // 通知 Canvas 刷新
             // 注意：需要在 Canvas 里公开一个 Refresh 方法
-            _canvas.RefreshLayout();
+            _canvas.PanRefresh();
 
             _lastMouseScreen = currentScreen;
         }
@@ -47,6 +47,9 @@ namespace RoiEditor.Core.Interaction
         {
             _isPanning = false;
             _canvas.ReleaseMouseCapture();
+
+            // 鼠标松开时补一次立即刷新，保证最后一帧瓦片到位
+            _canvas.RefreshTilesImmediate();
         }
     }
 }

@@ -414,27 +414,36 @@ namespace RoiEditor.Controls
 
                 var cts = new CancellationTokenSource();
                 _loadingCts[k] = cts;
+                _loadingTiles.Add(k);
 
-                _ = LoadTileAsync(k, tilePath, x, y, tileWorld, _mapVersion, cts.Token);
+                _ = LoadTileAsync(k, tilePath, x, y, tileWorld, _mapVersion,targetLevel, cts.Token);
             }
 
         }
 
-        private async Task LoadTileAsync(string key, string path, double x, double y, double tileWorld, int mapVersion, CancellationToken token)
+        private async Task LoadTileAsync(string key, string path, double x, double y,
+            double tileWorld, 
+            int mapVersion, 
+            int expectedLevel,
+            CancellationToken token)
         {
             if (string.IsNullOrEmpty(key)) return;
-            if (token.IsCancellationRequested)
-            {
-                System.Diagnostics.Debug.WriteLine($"[Tile] CANCELED before load {key}");
-                return;
-            }
 
-            _loadingTiles.Add(key);
+            int tileLevel = -1;
+            int idx = key.IndexOf('_');
+            if (idx > 0) int.TryParse(key.Substring(0, idx), out tileLevel);
 
             try
             {
+
+                if (token.IsCancellationRequested)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Tile] CANCELED before load {key}");
+                    return;
+                }
+
                 // 真正支持取消的加载
-                var imgSource = await _tileLoader.LoadAsync(path, token);
+                var imgSource = await _tileLoader.LoadAsync(path, token).ConfigureAwait(false);
                 if (token.IsCancellationRequested)
                 {
                     System.Diagnostics.Debug.WriteLine($"[Tile] CANCELED before load {key}");
@@ -442,42 +451,42 @@ namespace RoiEditor.Controls
                 }
                 if (imgSource == null) return;
 
-                // 版本校验：防切图跨版本
-                if (mapVersion != _mapVersion) return;
-
-                // 层级一致性：防“僵尸瓦片”
-                int currentNeededLevel = (int)Math.Max(0, Math.Log(1.0 / Math.Max(1e-9, MainMatrix.Matrix.M11), 2));
-                if (currentNeededLevel > _mapService.MaxLevel) currentNeededLevel = _mapService.MaxLevel;
-                if (currentNeededLevel < 0) currentNeededLevel = 0;
-
-                int tileLevel = -1;
-                int idx = key.IndexOf('_');
-                if (idx > 0) int.TryParse(key.Substring(0, idx), out tileLevel);
-                if (tileLevel != -1 && tileLevel != currentNeededLevel)
+                //=== UI提交：所有UI与集合操作只在UI线程做 ===
+                await Dispatcher.InvokeAsync(() =>
                 {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[Tile] DROP zombie {key}, currentLevel={currentNeededLevel}");
-                    return;
-                }
+                    if (_isCleanedUp) return;
+                    if (token.IsCancellationRequested) return;
 
-                var img = _tilePool.Rent();
-                if (img == null) return;
+                    //如果该key已经不在in-flight（被UpdateTiles取消并移除了）,直接丢弃
+                    if (!_loadingCts.ContainsKey(key) || !_loadingTiles.Contains(key))
+                        return;
 
-                img.Source = imgSource;
+                    //防切图跨版本
+                    if (mapVersion != _mapVersion) return;
 
-                // 缝隙修复：轻微 overlap
-                double overlap = 1.0;
-                img.Width = tileWorld + overlap;
-                img.Height = tileWorld + overlap;
-                img.Visibility = Visibility.Visible;
+                    //层级一致性：防“僵尸瓦片”
+                    //这里用expectedLevel（调度时的目标层级），并在UI线程比较CurrentLevel(最新)
+                    if(tileLevel != -1 && tileLevel != expectedLevel) return;
+                    if (CurrentLevel != expectedLevel) return;
 
-                Canvas.SetLeft(img, x);
-                Canvas.SetTop(img, y);
+                    var img = _tilePool.Rent();
+                    if (img == null) return;
 
-                if (_visibleTiles.TryGetValue(key, out var old))
-                    _tilePool.Return(old);
+                    img.Source = imgSource;
+                    // 缝隙修复：轻微 overlap
+                    double overlap = 1.0;
+                    img.Width = tileWorld + overlap;
+                    img.Height = tileWorld + overlap;
+                    img.Visibility = Visibility.Visible;
 
-                _visibleTiles[key] = img;
+                    Canvas.SetLeft(img,x);
+                    Canvas.SetTop(img,y);
+
+                    if(_visibleTiles.TryGetValue(key,out var old))
+                        _tilePool.Return(old);
+
+                    _visibleTiles[key] = img;
+                },DispatcherPriority.Render);
             }
             catch (OperationCanceledException)
             {
@@ -489,12 +498,24 @@ namespace RoiEditor.Controls
             }
             finally
             {
-                _loadingTiles.Remove(key);
-
-                if (_loadingCts.TryGetValue(key, out var cts))
+                try
                 {
-                    _loadingCts.Remove(key);
-                    try { cts.Dispose(); } catch { }
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        if(_isCleanedUp) return;
+
+                        _loadingTiles.Remove(key);
+
+                        if(_loadingCts.TryGetValue(key,out var cts))
+                        {
+                            _loadingCts.Remove(key);
+                            try { cts.Dispose(); } catch { }
+                        }
+                    },DispatcherPriority.Render);
+                }
+                catch (Exception ex) 
+                {
+                    System.Diagnostics.Debug.WriteLine($"[LoadTileAsync finally clear Error] {ex.Message}");
                 }
             }
         }
@@ -595,13 +616,25 @@ namespace RoiEditor.Controls
         protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e) => _currentTool.OnMouseUp(e);
         protected override void OnKeyDown(KeyEventArgs e) => _currentTool.OnKeyDown(e);
 
-        internal void RefreshLayout()
+        /// <summary>
+        /// 立即刷新：用于Zoom跨层，Fit，Resize等必须立刻更新瓦片的场景
+        /// </summary>
+        internal void RefreshTilesImmediate()
         {
             UpdateTiles();
             RenderEditorLayer();
         }
 
         internal void RedrawEditorLayer() => RenderEditorLayer();
+
+        /// <summary>
+        /// Pan专用：每帧只重画EditorLayer，并让瓦片更新走debounce（避免疯狂调度）
+        /// </summary>
+        internal void PanRefresh()
+        {
+            RenderEditorLayer();
+            UpdateTilesWithDebounce();
+        }
 
         internal void SetHoverRoi(RoiItem item)
         {
@@ -703,7 +736,7 @@ namespace RoiEditor.Controls
 
         private bool IsPointInRoi(RoiItem roi, Point p)
         {
-            var geom = RoiRenderer.BuildPolygonGeometry(roi.Points);
+            var geom = RoiRenderer.BuildGeometry(roi);
             if (geom.FillContains(p)) return true;
 
             double strokeWidth = 6.0 / Math.Max(1e-6, MainMatrix.Matrix.M11);
@@ -722,7 +755,7 @@ namespace RoiEditor.Controls
                 var roi = ItemsSource[i];
                 if (roi?.Points == null || roi.Points.Count < 3) continue;
 
-                var geom = RoiRenderer.BuildPolygonGeometry(roi.Points);
+                var geom = RoiRenderer.BuildGeometry(roi);
                 if (!geom.Bounds.Contains(wPos)) continue;
 
                 if (geom.FillContains(wPos)) return roi;

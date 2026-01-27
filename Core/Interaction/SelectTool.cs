@@ -4,6 +4,8 @@ using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Markup;
+using System.Windows.Media;
 
 namespace RoiEditor.Core.Interaction
 {
@@ -21,7 +23,7 @@ namespace RoiEditor.Core.Interaction
         private const double DRAG_THRESHOLD = 1.0;
 
         //手柄命中容差(像素)
-        private const double HANDLE_HIT_SIZE = 8.0;
+        private const double HANDLE_TOLERANCE = 2.0;
 
         public SelectTool(Controls.RoiEditorCanvas canvas) : base(canvas) { }
 
@@ -34,6 +36,7 @@ namespace RoiEditor.Core.Interaction
         {
             _isMouseDown = true;
             _dragStartScreen = e.GetPosition(_canvas);
+
             var wPos = GetWorldPosition(e);
             _lastMouseWorld = wPos;
 
@@ -99,18 +102,22 @@ namespace RoiEditor.Core.Interaction
 
                 if (isDragging)
                 {
-                    var delta = wPos - _lastMouseWorld;
+                    var roi = _canvas.SelectedRoi;
 
                     if (_dragMode == DragType.Body)
                     {
                         // 平移
-                        var roi = _canvas.SelectedRoi;
-                        for (int i = 0; i < roi.Points.Count; i++) roi.Points[i] += delta;
+                        var delta = wPos - _lastMouseWorld;
+                        if(roi.Points != null)
+                        {
+                            for (int i = 0; i < roi.Points.Count; i++)
+                                roi.Points[i] += delta;
+                        }
                     }
                     else
                     {
                         // 拉伸
-                        ResizeRoi(_canvas.SelectedRoi, _dragMode, wPos);
+                        ResizeRoi(roi, _dragMode, wPos);
                     }
 
                     _canvas.RedrawEditorLayer();
@@ -135,7 +142,7 @@ namespace RoiEditor.Core.Interaction
                 // 拖拽/拉伸结束后，规范化矩形并重建索引
                 if (_canvas.SelectedRoi != null)
                 {
-                    NormalizeRoi(_canvas.SelectedRoi); // 防止拉伸出负宽高的矩形
+                    NormalizeByType(_canvas.SelectedRoi); 
                     _canvas.RebuildSpatialIndex();
                 }
 
@@ -148,39 +155,142 @@ namespace RoiEditor.Core.Interaction
         // ==========================================================
 
         /// <summary>
-        /// 根据鼠标位置，拉伸矩形
-        /// 假设 ROI 是个标准矩形 (P0=TL, P1=TR, P2=BR, P3=BL)
+        /// 通用变形算法：支持矩形、多边形、贝塞尔曲线、圆
         /// </summary>
         private void ResizeRoi(RoiItem item, DragType handle, Point currentWorldPos)
         {
-            if (item.Points == null || item.Points.Count < 4) return;
+            if (item == null || item.Points == null || item.Points.Count == 0)
+                return;
 
-            // 获取当前包围盒
-            var rect = GetBoundingRect(item.Points);
-            double left = rect.Left;
-            double top = rect.Top;
-            double right = rect.Right;
-            double bottom = rect.Bottom;
-
-            // 根据手柄修改边界
-            // 注意：这里没有限制最小宽高，可能会拉反，依靠 OnMouseUp 的 Normalize 修复
-            switch (handle)
+            //1.Circle：2点定义包围盒，直接改包围盒最稳
+            if (item.Type == Enums.RoiType.Circle)
             {
-                case DragType.TopLeft: left = currentWorldPos.X; top = currentWorldPos.Y; break;
-                case DragType.Top: top = currentWorldPos.Y; break;
-                case DragType.TopRight: right = currentWorldPos.X; top = currentWorldPos.Y; break;
-                case DragType.Right: right = currentWorldPos.X; break;
-                case DragType.BottomRight: right = currentWorldPos.X; bottom = currentWorldPos.Y; break;
-                case DragType.Bottom: bottom = currentWorldPos.Y; break;
-                case DragType.BottomLeft: left = currentWorldPos.X; bottom = currentWorldPos.Y; break;
-                case DragType.Left: left = currentWorldPos.X; break;
+                ResizeCircleBBox(item,handle,currentWorldPos);
+                return;
             }
 
-            // 直接重写 4 个点
+            //计算【旧】包围盒（变形前的基准）
+            //注意：这里必须重新计算一次原始包围盒
+            //我们先算当前的Bounds,然后根据Handle和currentWorldPos算出目标Bounds
+            Rect oldBounds = GetBoundingRect(item.Points);
+            if (oldBounds.Width < 0.1 || oldBounds.Height < 0.1)
+                return;
+
+            Rect newBounds = GetResizedBounds(oldBounds,handle,currentWorldPos);
+
+            if (Math.Abs(newBounds.Width) < 1e-6 || Math.Abs(newBounds.Height) < 1e-6)
+                return;
+
+            double scaleX = newBounds.Width / oldBounds.Width;
+            double scaleY = newBounds.Height / oldBounds.Height;
+            for(int i = 0;i < item.Points.Count;i++)
+            {
+                Point p = item.Points[i];
+
+                double nx = (p.X - oldBounds.X);
+                double ny = (p.Y - oldBounds.Y);
+
+                double fx = newBounds.X + (nx * scaleX);
+                double fy = newBounds.Y + (ny * scaleY);
+
+                item.Points[i] = new Point(fx, fy);
+
+            }
+        }
+
+        private void ResizeCircleBBox(RoiItem item,DragType handle,Point currentWorldPos)
+        {
+            if (item.Points.Count < 2)
+                return;
+
+            var tl = item.Points[0];
+            var br = item.Points[1];
+
+            double left = Math.Min(tl.X, br.X);
+            double right = Math.Max(tl.X, br.X);
+            double top = Math.Min(tl.Y, br.Y);
+            double bottom = Math.Max(tl.Y, br.Y);
+
+            Rect oldBounds = new Rect(left, top, right - left, bottom - top);
+            if (oldBounds.Width < 0.1 || oldBounds.Height < 0.1) return;
+
+            Rect newBounds = GetResizedBounds(oldBounds, handle, currentWorldPos);
+
+            // 写回两点（TL/BR）
+            item.Points[0] = newBounds.TopLeft;
+            item.Points[1] = newBounds.BottomRight;
+        }
+
+        private Rect GetResizedBounds(Rect oldBounds,DragType handle,Point currentWorldPos)
+        {
+            double newLeft = oldBounds.Left;
+            double newTop = oldBounds.Top;
+            double newRight = oldBounds.Right;
+            double newBottom = oldBounds.Bottom;
+
+            switch (handle)
+            {
+                case DragType.TopLeft: newLeft = currentWorldPos.X; newTop = currentWorldPos.Y; break;
+                case DragType.Top: newTop = currentWorldPos.Y; break;
+                case DragType.TopRight: newRight = currentWorldPos.X; newTop = currentWorldPos.Y; break;
+                case DragType.Right: newRight = currentWorldPos.X; break;
+                case DragType.BottomRight: newRight = currentWorldPos.X; newBottom = currentWorldPos.Y; break;
+                case DragType.Bottom: newBottom = currentWorldPos.Y; break;
+                case DragType.BottomLeft: newLeft = currentWorldPos.X; newBottom = currentWorldPos.Y; break;
+                case DragType.Left: newLeft = currentWorldPos.X; break;
+            }
+
+            // 注意：允许翻转（宽高为负时 scaleX/scaleY 为负，点集会镜像）
+            return new Rect(newLeft, newTop, newRight - newLeft, newBottom - newTop);
+        }
+
+        private void NormalizeByType(RoiItem item)
+        {
+            if (item == null || item.Points == null) return;
+
+            switch (item.Type)
+            {
+                case Enums.RoiType.Rectangle:
+                    NormalizeRectangle(item);
+                    break;
+
+                case Enums.RoiType.Circle:
+                    NormalizeCircle(item);
+                    break;
+
+                // Polygon / Bezier：不改点序，避免破坏语义
+                default:
+                    break;
+            }
+        }
+
+        private void NormalizeRectangle(RoiItem item)
+        {
+            if (item.Points == null || item.Points.Count < 4) return;
+
+            var r = GetBoundingRect(item.Points);
+
+            // 重新按顺序写入 TL, TR, BR, BL
+            item.Points[0] = r.TopLeft;
+            item.Points[1] = r.TopRight;
+            item.Points[2] = r.BottomRight;
+            item.Points[3] = r.BottomLeft;
+        }
+
+        private void NormalizeCircle(RoiItem item)
+        {
+            if (item.Points == null || item.Points.Count < 2) return;
+
+            var p0 = item.Points[0];
+            var p1 = item.Points[1];
+
+            double left = Math.Min(p0.X, p1.X);
+            double right = Math.Max(p0.X, p1.X);
+            double top = Math.Min(p0.Y, p1.Y);
+            double bottom = Math.Max(p0.Y, p1.Y);
+
             item.Points[0] = new Point(left, top);
-            item.Points[1] = new Point(right, top);
-            item.Points[2] = new Point(right, bottom);
-            item.Points[3] = new Point(left, bottom);
+            item.Points[1] = new Point(right, bottom);
         }
 
         /// <summary>
@@ -188,40 +298,30 @@ namespace RoiEditor.Core.Interaction
         /// </summary>
         private DragType GetHandleUnderMouse(Point screenPos, RoiItem item)
         {
-            // 1. 先计算 ROI 在屏幕上的包围盒
-            var m = _canvas.MainMatrix.Matrix;
+           if(item == null) return DragType.None;
 
-            // 简单把四个角转到屏幕坐标求 Bounds
-            // (这里假设是矩形，如果是任意多边形，逻辑也是求 Screen Bounds)
-            var p0 = m.Transform(item.Points[0]);
-            var p2 = m.Transform(item.Points[2]);
+            var geom = RoiRenderer.BuildGeometry(item);
+            if(geom == null) return DragType.None;
 
-            double l = Math.Min(p0.X, p2.X);
-            double t = Math.Min(p0.Y, p2.Y);
-            double r = Math.Max(p0.X, p2.X);
-            double b = Math.Max(p0.Y, p2.Y);
+            //World -> Screen
+            var screenGeom = geom.Clone();
+            screenGeom.Transform = new MatrixTransform(_canvas.MainMatrix.Matrix);
 
-            Rect bounds = new Rect(l, t, r - l, b - t);
+            Rect bounds = screenGeom.GetRenderBounds(new Pen(Brushes.Black, 0.0));
 
-            // 2. 直接调用 Renderer 的静态方法获取 8 个手柄的准确位置
             var handleRects = RoiRenderer.GetHandleRects(bounds);
-
-            // 如果返回 null，说明 Renderer 觉得太小没画，那自然也点不中
             if (handleRects == null) return DragType.None;
 
-            // 3. 稍微扩大一点点击判定范围 (比如 +2px)，提升手感
-            // 否则 8px 的手柄太难点了
-            double tolerance = 2.0;
+            double tol = HANDLE_TOLERANCE;
 
-            // 顺序对应：TL, T, TR, R, BR, B, BL, L
-            if (HitRect(handleRects[0], screenPos, tolerance)) return DragType.TopLeft;
-            if (HitRect(handleRects[1], screenPos, tolerance)) return DragType.Top;
-            if (HitRect(handleRects[2], screenPos, tolerance)) return DragType.TopRight;
-            if (HitRect(handleRects[3], screenPos, tolerance)) return DragType.Right;
-            if (HitRect(handleRects[4], screenPos, tolerance)) return DragType.BottomRight;
-            if (HitRect(handleRects[5], screenPos, tolerance)) return DragType.Bottom;
-            if (HitRect(handleRects[6], screenPos, tolerance)) return DragType.BottomLeft;
-            if (HitRect(handleRects[7], screenPos, tolerance)) return DragType.Left;
+            if (HitRect(handleRects[0], screenPos, tol)) return DragType.TopLeft;
+            if (HitRect(handleRects[1], screenPos, tol)) return DragType.Top;
+            if (HitRect(handleRects[2], screenPos, tol)) return DragType.TopRight;
+            if (HitRect(handleRects[3], screenPos, tol)) return DragType.Right;
+            if (HitRect(handleRects[4], screenPos, tol)) return DragType.BottomRight;
+            if (HitRect(handleRects[5], screenPos, tol)) return DragType.Bottom;
+            if (HitRect(handleRects[6], screenPos, tol)) return DragType.BottomLeft;
+            if (HitRect(handleRects[7], screenPos, tol)) return DragType.Left;
 
             return DragType.None;
         }
@@ -276,16 +376,6 @@ namespace RoiEditor.Core.Interaction
                 if (p.Y > maxY) maxY = p.Y;
             }
             return new Rect(minX, minY, maxX - minX, maxY - minY);
-        }
-
-        private void NormalizeRoi(RoiItem item)
-        {
-            var r = GetBoundingRect(item.Points);
-            // 重新按顺序写入 TL, TR, BR, BL
-            item.Points[0] = r.TopLeft;
-            item.Points[1] = r.TopRight;
-            item.Points[2] = r.BottomRight;
-            item.Points[3] = r.BottomLeft;
         }
     }
 }

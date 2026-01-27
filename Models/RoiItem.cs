@@ -19,7 +19,19 @@ namespace RoiEditor.Models
 
         public int Id { get; set; }
         public string Name { get; set; }
-        public RoiType Type { get; set; }
+
+        private RoiType _type;
+
+        public RoiType Type
+        {
+            get { return _type; }
+            set 
+            { 
+                _type = value;
+                NotifyOfPropertyChange(() => Type);
+            }
+        }
+
 
         public Color Color
         {
