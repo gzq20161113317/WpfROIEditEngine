@@ -39,7 +39,7 @@ namespace RoiEditor.Core.Interaction
             //2.选中它(IsSelected = true)
             //此时因为IsEditing还是false，所以屏幕上只会显示青色虚线框，不会显示手柄
             //这符合预期：拖拽过程中不需要看手柄
-            _canvas.SelectROIRegion(_newItem);
+            _canvas.SelectROIRegion(_newItem);//SelectROIRegion会
 
             _canvas.CaptureMouse();
         }
@@ -65,6 +65,20 @@ namespace RoiEditor.Core.Interaction
             {
                 // 规范化矩形 (处理负宽高)
                 NormalizeRectPoints(_newItem.Points);
+
+                Rect bounds = GetBoundingRect(_newItem.Points);
+
+                // 判断：宽 和 高 都小于 2
+                if (bounds.Width < 2.0 && bounds.Height < 2.0)
+                {
+                    // 视为无效绘制：从画布中移除刚才 MouseDown 创建的临时对象
+                    _canvas.ItemsSource?.Remove(_newItem);
+                    // 清理状态
+                    _canvas.SelectROIRegion(null);
+                    _newItem = null;
+                    _canvas.ReleaseMouseCapture();
+                    return; // 直接返回，不执行后面的选中或提交逻辑
+                }
 
                 _newItem.IsEditing = true;
 
@@ -99,6 +113,12 @@ namespace RoiEditor.Core.Interaction
             pts[1] = new Point(right, top);
             pts[2] = new Point(right, bottom);
             pts[3] = new Point(left, bottom);
+        }
+
+        private Rect GetBoundingRect(IList<Point> points)
+        {
+            if (points == null || points.Count == 0) return Rect.Empty;
+            return new Rect(points[0], points[2]); // 因为已经Normalize过了，0和2就是对角点
         }
     }
 }

@@ -648,9 +648,6 @@ namespace RoiEditor.Controls
         internal void SelectROIRegion(ROIRegion item)
         {
             SetCurrentValue(SelectedROIRegionProperty, item);
-            _activeROIRegion = item;
-            RenderStaticLayer();
-            RenderEditorLayer();
         }
 
         // =========================
@@ -800,14 +797,14 @@ namespace RoiEditor.Controls
             if (mapW <= 1 || mapH <= 1 || ActualWidth <= 1 || ActualHeight <= 1)
                 return;
 
-            double scaleFit = Math.Min(ActualWidth / mapW, ActualHeight / mapH) * 0.95;
+            double scaleFit = Math.Min(ActualWidth / mapW, ActualHeight / mapH);
             double scale = scaleFit;
 
             if (scale > MAX_ZOOM) scale = MAX_ZOOM;
             if (scale < MIN_ZOOM) scale = MIN_ZOOM;
 
             double tx = (ActualWidth * 0.5) - (mapW * 0.5) * scale;
-            double ty = (ActualHeight * 0.5) - (mapH * 0.5) * scale;
+            double ty = 0;
 
             MainMatrix.Matrix = new Matrix(scale, 0, 0, scale, tx, ty);
 
