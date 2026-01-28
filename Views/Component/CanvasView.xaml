@@ -1,0 +1,29 @@
+﻿<UserControl x:Class="RoiEditor.Views.Component.CanvasView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:RoiEditor.Views.Component" xmlns:controls="clr-namespace:RoiEditor.Controls"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <controls:RoiEditorCanvas Grid.Row="0"
+                            ItemsSource="{Binding FlatROIRegions}"
+                            ROIOperationMode="{Binding CurrentOperationMode}"
+                            MapPath="{Binding MapPath}"
+                            MaxLevel="{Binding MaxLevel, Mode=OneWayToSource}" 
+                            CurrentLevel="{Binding CurrentLevel, Mode=OneWayToSource}"
+                            EventAggregator="{Binding EventAggregator}"
+                            SelectedROIRegion="{Binding SelectedROIRegion, Mode=TwoWay}"
+                            Background="#1E1E1E"/>
+        <StatusBar Grid.Row="1">
+            <StatusBarItem>
+                <TextBlock Text="{Binding LevelStatusString}" FontWeight="Bold"/>
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</UserControl>

@@ -6,7 +6,8 @@
         xmlns:local="clr-namespace:SelectRoiWindows.Views"
         mc:Ignorable="d"
        Title="Shell" 
-        WindowState="Maximized"
+        Height="840"
+        Width="1240"
         WindowStartupLocation="CenterScreen">
     <Grid>
         <Grid.RowDefinitions>
@@ -27,7 +28,7 @@
             </MenuItem>
         </Menu>
 
-        <ContentControl x:Name="ActiveItem" Grid.Row="1"/>
+        <ContentControl x:Name="RoiEditorView" Grid.Row="1"/>
 
         <StatusBar Grid.Row="2" Background="#007ACC" Foreground="White">
             <StatusBarItem>

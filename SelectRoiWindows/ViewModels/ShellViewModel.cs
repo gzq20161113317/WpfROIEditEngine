@@ -13,13 +13,13 @@ namespace SelectRoiWindows.ViewModels
 {
     public class ShellViewModel : Conductor<object>
     {
-        private readonly RoiMainViewModel _editorVm;
+        public RoiMainViewModel RoiEditorView { get; set; }
         private readonly IEventAggregator _events;
         private string _statusMessage = "Ready";
 
-        public ShellViewModel(RoiMainViewModel editorVm, IEventAggregator events)
+        public ShellViewModel(IEventAggregator events)
         {
-            _editorVm = editorVm;
+            RoiEditorView = new RoiMainViewModel(events);
             _events = events;
         }
 
@@ -38,9 +38,6 @@ namespace SelectRoiWindows.ViewModels
         {
             base.OnInitialize();
             DisplayName = "Wafer Inspection Workstation (.NET 4.7.2)";
-
-            // CM 3.x: 同步激活 Item
-            ActivateItem(_editorVm);
         }
 
         // === 动作 ===
@@ -60,7 +57,7 @@ namespace SelectRoiWindows.ViewModels
                     StatusMessage = $"Loading: {selectedPath}";
 
                     // 赋值给 Lib 的 VM，触发加载
-                    _editorVm.MapPath = selectedPath;
+                    RoiEditorView.LoadMap(selectedPath);
 
                     StatusMessage = $"Ready - {selectedPath}";
                 }

@@ -9,9 +9,10 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>RoiEditor</RootNamespace>
     <AssemblyName>RoiEditor</AssemblyName>
-    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -74,11 +75,23 @@
     <Compile Include="Core\Rendering\VisualHost.cs" />
     <Compile Include="Enums\DrawMode.cs" />
     <Compile Include="Enums\RegionRelation.cs" />
+    <Compile Include="Enums\ROIDrawMode.cs" />
+    <Compile Include="Enums\ROIOperationMode.cs" />
     <Compile Include="Enums\ROIRegionType.cs" />
     <Compile Include="Events\FitToCoarsestRequestEvent.cs" />
+    <Compile Include="Events\ROIDrawModeChangedEvent.cs" />
+    <Compile Include="Events\ROIOperationModeChangedEvent.cs" />
     <Compile Include="Models\ROIRegion.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="ViewModels\Component\CanvasViewModel.cs" />
+    <Compile Include="ViewModels\Component\ToolBarViewModel.cs" />
     <Compile Include="ViewModels\RoiMainViewModel.cs" />
+    <Compile Include="Views\Component\CanvasView.xaml.cs">
+      <DependentUpon>CanvasView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\Component\ToolBarView.xaml.cs">
+      <DependentUpon>ToolBarView.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Views\RoiMainView.xaml.cs">
       <DependentUpon>RoiMainView.xaml</DependentUpon>
     </Compile>
@@ -89,6 +102,14 @@
   <ItemGroup />
   <ItemGroup>
     <Page Include="Controls\RoiEditorCanvas.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\Component\CanvasView.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\Component\ToolBarView.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

@@ -30,10 +30,6 @@ namespace SelectRoiWindows
 
             // 2. 注册主窗口 Shell
             _container.PerRequest<ShellViewModel>();
-
-            // 3. 【关键】注册 Lib 中的 EditorViewModel
-            // 这样 Shell 请求 EditorViewModel 时，容器会自动注入 EventAggregator
-            _container.PerRequest<RoiMainViewModel>();
         }
 
 

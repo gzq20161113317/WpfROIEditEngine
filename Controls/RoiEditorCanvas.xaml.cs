@@ -42,9 +42,9 @@ namespace RoiEditor.Controls
             nameof(ItemsSource), typeof(IObservableCollection<ROIRegion>), typeof(RoiEditorCanvas),
             new PropertyMetadata(null, OnItemsSourceChanged));
 
-        public static readonly DependencyProperty ModeProperty = DependencyProperty.Register(
-            nameof(Mode), typeof(DrawMode), typeof(RoiEditorCanvas),
-            new PropertyMetadata(DrawMode.Pan, OnModeChanged));
+        public static readonly DependencyProperty ROIOperationModeProperty = DependencyProperty.Register(
+            nameof(ROIOperationMode), typeof(ROIOperationMode), typeof(RoiEditorCanvas),
+            new PropertyMetadata(ROIOperationMode.ROI_OS_Pan, OnROIOperationModeChanged));
 
         public static readonly DependencyProperty MapPathProperty = DependencyProperty.Register(
             nameof(MapPath), typeof(string), typeof(RoiEditorCanvas),
@@ -88,10 +88,10 @@ namespace RoiEditor.Controls
             set => SetValue(ItemsSourceProperty, value);
         }
 
-        public DrawMode Mode
+        public ROIOperationMode ROIOperationMode
         {
-            get => (DrawMode)GetValue(ModeProperty);
-            set => SetValue(ModeProperty, value);
+            get => (ROIOperationMode)GetValue(ROIOperationModeProperty);
+            set => SetValue(ROIOperationModeProperty, value);
         }
 
         public string MapPath
@@ -141,7 +141,7 @@ namespace RoiEditor.Controls
         private QuadTree<ROIRegion> _spatialIndex;
 
         private IInteractionTool _currentTool;
-        private Dictionary<DrawMode, IInteractionTool> _tools;
+        private Dictionary<ROIOperationMode, IInteractionTool> _tools;
 
         // =========================
         // Initialization
@@ -177,14 +177,14 @@ namespace RoiEditor.Controls
                 UpdateTiles();
             };
 
-            _tools = new Dictionary<DrawMode, IInteractionTool>
+            _tools = new Dictionary<ROIOperationMode, IInteractionTool>
             {
-                { DrawMode.Pan, new PanTool(this) },
-                { DrawMode.Select, new SelectROIRegionTool(this) },
-                { DrawMode.DrawRectangle, new CreateRectTool(this) }
+                { ROIOperationMode.ROI_OS_Pan, new PanTool(this) },
+                { ROIOperationMode.ROI_OS_Select, new SelectROIRegionTool(this) },
+                { ROIOperationMode.ROI_OS_ROI_Shape_Rectangle, new CreateRectTool(this) }
             };
 
-            _currentTool = _tools[DrawMode.Pan];
+            _currentTool = _tools[ROIOperationMode.ROI_OS_Pan];
             _currentTool.OnActivated();
         }
 
@@ -213,7 +213,7 @@ namespace RoiEditor.Controls
         private static void OnItemsSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var c = (RoiEditorCanvas)d;
-
+            
             if (e.OldValue is INotifyCollectionChanged oldColl)
                 oldColl.CollectionChanged -= c.OnCollectionChanged;
 
@@ -226,7 +226,7 @@ namespace RoiEditor.Controls
         }
 
         private void OnCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
-        {
+        {           
             RebuildSpatialIndex();
             RenderStaticLayer();
             RenderEditorLayer();
@@ -556,13 +556,13 @@ namespace RoiEditor.Controls
         // =========================
         // Interaction
         // =========================
-        private static void OnModeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        private static void OnROIOperationModeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             if (d is RoiEditorCanvas canvas)
-                canvas.SwitchTool((DrawMode)e.NewValue);
+                canvas.SwitchTool((ROIOperationMode)e.NewValue);
         }
 
-        private void SwitchTool(DrawMode newMode)
+        private void SwitchTool(ROIOperationMode newMode)
         {
             if (_tools == null) return;
 

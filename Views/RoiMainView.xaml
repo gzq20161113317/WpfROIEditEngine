@@ -22,72 +22,14 @@
                 <RowDefinition Height="Auto"/>
                 <!-- ToolBar -->
                 <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
                 <!-- Canvas -->
             </Grid.RowDefinitions>
 
             <!-- ToolBar (Row 0) -->
-            <Border Grid.Row="0"
-                    Background="#333"
-                    BorderBrush="#444"
-                    BorderThickness="0,0,0,1"
-                    Padding="8">
-                <DockPanel LastChildFill="False">
-                    <!-- 左侧按钮区 -->
-                    <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                        <Button x:Name="SetPanMode" Width="90" Height="36" Margin="0,0,8,0" ToolTip="平移 (Pan)">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="✋" FontSize="16" Margin="0,0,6,0"/>
-                                <TextBlock Text="Pan" FontSize="12" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
-
-                        <Button x:Name="SetSelectMode" Width="90" Height="36" Margin="0,0,8,0" ToolTip="选择 (Select)">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="↖" FontSize="16" Margin="0,0,6,0"/>
-                                <TextBlock Text="Select" FontSize="12" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
-
-                        <Button x:Name="SetDrawRectMode" Width="90" Height="36" ToolTip="画矩形 (Draw Rect)">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="⬜" FontSize="16" Margin="0,0,6,0"/>
-                                <TextBlock Text="Rect" FontSize="12" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
-                        <Button x:Name="FitToCoarsest" Width="120" Height="36" Margin="8,0,0,0" ToolTip="最低清层居中">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="⌖" FontSize="16" Margin="0,0,6,0"/>
-                                <TextBlock Text="Fit Low" FontSize="12" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
-
-                    <!-- 右侧状态区 -->
-                    <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
-                        <TextBlock Text="MODE:" Foreground="Gray" FontSize="11" Margin="0,0,6,0"/>
-                        <TextBlock Text="{Binding CurrentMode}" Foreground="Cyan" FontWeight="Bold" Margin="0,0,14,0"/>
-
-                        <TextBlock Text="{Binding ROIRegionList.Count, StringFormat='ROIs: {0}'}" Foreground="White" FontSize="11" />
-                    </StackPanel>
-                </DockPanel>
-            </Border>
+            <ContentControl x:Name="ToolBar" Grid.Row="0" />
 
             <!-- RoiEditorCanvas (Row 1) -->
-            <controls:RoiEditorCanvas Grid.Row="1"
-                                      ItemsSource="{Binding ROIRegionList}"
-                                      Mode="{Binding CurrentMode}"
-                                      MapPath="{Binding MapPath}"
-                                      MaxLevel="{Binding MaxLevel, Mode=OneWayToSource}" 
-                                      CurrentLevel="{Binding CurrentLevel, Mode=OneWayToSource}"
-                                      EventAggregator="{Binding EventAggregator}"
-                                      SelectedROIRegion="{Binding SelectedROIRegion, Mode=TwoWay}"
-                                      Background="#1E1E1E"/>
-            <StatusBar Grid.Row="2">
-                <StatusBarItem>
-                    <TextBlock Text="{Binding LevelStatusString}" FontWeight="Bold"/>
-                </StatusBarItem>
-            </StatusBar>
+            <ContentControl x:Name="Canvas" Grid.Row="1" />
         </Grid>
 
         <!-- ===================== Right Column ===================== -->

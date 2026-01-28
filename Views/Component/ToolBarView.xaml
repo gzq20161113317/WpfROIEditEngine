@@ -1,0 +1,54 @@
+﻿<UserControl x:Class="RoiEditor.Views.Component.ToolBarView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:RoiEditor.Views.Component"
+             mc:Ignorable="d" 
+             d:DesignHeight="50" d:DesignWidth="800">
+    <Border 
+        Background="#333"
+        BorderBrush="#444"
+        BorderThickness="0,0,0,1"
+        Padding="8">
+        <DockPanel LastChildFill="False">
+            <!-- 左侧按钮区 -->
+            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                <Button x:Name="SetROIOperationPan" Width="90" Height="36" Margin="0,0,8,0" ToolTip="平移 (Pan)">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="✋" FontSize="16" Margin="0,0,6,0"/>
+                        <TextBlock Text="Pan" FontSize="12" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
+                <Button x:Name="SetROIOperationSelect" Width="90" Height="36" Margin="0,0,8,0" ToolTip="选择 (Select)">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="↖" FontSize="16" Margin="0,0,6,0"/>
+                        <TextBlock Text="Select" FontSize="12" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
+                <Button x:Name="SetROIOperationDrawRect" Width="90" Height="36" ToolTip="画矩形 (Draw Rect)">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="⬜" FontSize="16" Margin="0,0,6,0"/>
+                        <TextBlock Text="Rect" FontSize="12" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button x:Name="FitToCoarsest" Width="120" Height="36" Margin="8,0,0,0" ToolTip="最低清层居中">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="⌖" FontSize="16" Margin="0,0,6,0"/>
+                        <TextBlock Text="Fit Low" FontSize="12" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+
+            <!-- 右侧状态区 -->
+            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
+                <TextBlock Text="MODE:" Foreground="Gray" FontSize="11" Margin="0,0,6,0"/>
+                <TextBlock Text="{Binding CurrentOperationMode}" Foreground="Cyan" FontWeight="Bold" Margin="0,0,14,0"/>
+                <TextBlock Text="Draw MODE:" Foreground="Gray" FontSize="11" Margin="0,0,6,0"/>
+                <TextBlock Text="{Binding CurrentDrawMode}" Foreground="Cyan" FontWeight="Bold" Margin="0,0,14,0"/>
+            </StackPanel>
+        </DockPanel>
+    </Border>
+</UserControl>

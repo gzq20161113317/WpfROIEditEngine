@@ -17,8 +17,20 @@ namespace RoiEditor.Core.IO
         private string _mapPath;
         private int _maxLevel;
 
+        private struct LevelInfo
+        {
+            public int MaxRow;
+            public int MaxCol;
+
+            public LevelInfo(int maxRow, int maxCol)
+            {
+                MaxRow = maxRow;
+                MaxCol = maxCol;
+            }
+        }
+
         // Level -> (MaxRow, MaxCol)
-        private readonly Dictionary<int, (int rows, int cols)> _levelInfoCache = new Dictionary<int, (int, int)>();
+        private readonly Dictionary<int,LevelInfo> _levelInfoCache = new Dictionary<int, LevelInfo>();
 
         public int MaxLevel => _maxLevel;
         public string MapPath => _mapPath;
@@ -57,15 +69,15 @@ namespace RoiEditor.Core.IO
 
             if (_levelInfoCache.TryGetValue(level, out var info))
             {
-                maxRow = info.rows;
-                maxCol = info.cols;
+                maxRow = info.MaxRow;
+                maxCol = info.MaxCol;
                 return (maxRow >= 0 && maxCol >= 0);
             }
 
             string levelDir = Path.Combine(_mapPath, level.ToString());
             if (!Directory.Exists(levelDir))
             {
-                _levelInfoCache[level] = (-1, -1);
+                _levelInfoCache[level] = new LevelInfo(-1,-1);
                 return false;
             }
 
@@ -90,7 +102,7 @@ namespace RoiEditor.Core.IO
                 // ignore
             }
 
-            _levelInfoCache[level] = (rMax, cMax);
+            _levelInfoCache[level] = new LevelInfo(rMax, cMax);
             maxRow = rMax;
             maxCol = cMax;
 
