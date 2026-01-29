@@ -11,10 +11,7 @@ namespace RoiEditor.Core.Interaction
 
         public PanTool(Controls.RoiEditorCanvas canvas) : base(canvas) { }
 
-        public override void OnActivated()
-        {
-            _canvas.Cursor = Cursors.Hand; // 切换光标
-        }
+        public override Cursor SystemCursor => Cursors.Hand;
 
         public override void OnMouseDown(MouseButtonEventArgs e)
         {

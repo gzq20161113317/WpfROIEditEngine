@@ -13,10 +13,10 @@ namespace RoiEditor.Core.Interaction
     public interface IInteractionTool
     {
         // 工具被激活时触发 (如切换光标)
-        void OnActivated();
+        void Activate();
 
         // 工具被停用时触发 (如清理临时状态)
-        void OnDeactivated();
+        void Deactivate();
 
         // 核心交互事件
         void OnMouseDown(MouseButtonEventArgs e);

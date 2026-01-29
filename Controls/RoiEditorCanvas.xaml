@@ -24,6 +24,17 @@
         <!-- Screen Space：选中 ROI（虚线像素一致） -->
         <Canvas x:Name="EditorLayer" IsHitTestVisible="False"/>
 
+        <!-- Cursor Space -->
+        <Canvas x:Name="CursorLayer" IsHitTestVisible="False">
+
+            <ContentControl x:Name="CursorContainer" Visibility="Collapsed">
+                <ContentControl.RenderTransform>
+                    <TranslateTransform x:Name="CursorTransform"/>
+                </ContentControl.RenderTransform>
+            </ContentControl>
+
+        </Canvas>
+
         <TextBlock Text="{Binding ElementName=MainMatrix, Path=Matrix.M11, StringFormat='Zoom: {0:F2}x'}"
                    Foreground="Lime"
                    Margin="6"

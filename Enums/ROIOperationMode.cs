@@ -35,13 +35,23 @@ namespace RoiEditor.Enums
         ROI_OS_MoveShape,
         ROI_OS_MultiMove,
         
+        ROI_OS_Undo,
+
         ROI_OS_Zoom_In,
         ROI_OS_Zoom_Out,
+        ROI_OS_Zoom_Resume,
 
         ROI_OS_Delete_Range,
 
         ROI_OS_Pan,
         ROI_OS_Select,
-        ROI_OS_Copy
+        ROI_OS_Copy,
+
+        //ROIS
+        ROI_OS_SplitROI,
+        ROI_OS_ClearROIS,
+        ROI_OS_SaveROIS,
+
+        ROI_OS_None
     }
 }

@@ -3,8 +3,10 @@ using RoiEditor.Models;
 using System;
 using System.Collections.Generic;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Shapes;
 
 namespace RoiEditor.Core.Interaction
 {
@@ -15,9 +17,35 @@ namespace RoiEditor.Core.Interaction
 
         public CreateRectTool(Controls.RoiEditorCanvas canvas) : base(canvas) { }
 
-        public override void OnActivated()
+        // 每次激活工具时，给 Canvas 一个崭新的 UI，绝对安全
+        public override UIElement GetCustomCursorView() => CreateCrossCursorUI();
+
+        private Grid CreateCrossCursorUI()
         {
-            _canvas.Cursor = Cursors.Cross;
+            var grid = new Grid { Margin = new Thickness(-10, -10, 0, 0) };
+
+            var pathDataStr = "M10,0 L10,20 M0,10 L20,10";
+            var geometry = Geometry.Parse(pathDataStr);
+            // 冻结资源以提升性能
+            if (geometry.CanFreeze) geometry.Freeze();
+
+            // 底层：白色描边 (3像素粗)
+            var outlinePath = new Path
+            {
+                Data = geometry,
+                Stroke = Brushes.White,
+                StrokeThickness = 3,
+                // 【关键】对于小尺寸光标，开启像素对齐能防止线条发虚
+                SnapsToDevicePixels = true,
+                IsHitTestVisible = false
+            };
+
+
+
+            // 先加描边，再加核心
+            grid.Children.Add(outlinePath);
+
+            return grid;
         }
 
         public override void OnMouseDown(MouseButtonEventArgs e)

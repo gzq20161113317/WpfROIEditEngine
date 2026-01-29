@@ -3,52 +3,141 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-             xmlns:local="clr-namespace:RoiEditor.Views.Component"
+             xmlns:cal="http://www.caliburnproject.org"
+             
+             xmlns:vm="clr-namespace:RoiEditor.ViewModels.Component"
+             
              mc:Ignorable="d" 
-             d:DesignHeight="50" d:DesignWidth="800">
-    <Border 
-        Background="#333"
-        BorderBrush="#444"
-        BorderThickness="0,0,0,1"
-        Padding="8">
-        <DockPanel LastChildFill="False">
-            <!-- 左侧按钮区 -->
-            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                <Button x:Name="SetROIOperationPan" Width="90" Height="36" Margin="0,0,8,0" ToolTip="平移 (Pan)">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="✋" FontSize="16" Margin="0,0,6,0"/>
-                        <TextBlock Text="Pan" FontSize="12" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
+             d:DesignWidth="600" d:DesignHeight="60">
 
-                <Button x:Name="SetROIOperationSelect" Width="90" Height="36" Margin="0,0,8,0" ToolTip="选择 (Select)">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="↖" FontSize="16" Margin="0,0,6,0"/>
-                        <TextBlock Text="Select" FontSize="12" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
 
-                <Button x:Name="SetROIOperationDrawRect" Width="90" Height="36" ToolTip="画矩形 (Draw Rect)">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="⬜" FontSize="16" Margin="0,0,6,0"/>
-                        <TextBlock Text="Rect" FontSize="12" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-                <Button x:Name="FitToCoarsest" Width="120" Height="36" Margin="8,0,0,0" ToolTip="最低清层居中">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="⌖" FontSize="16" Margin="0,0,6,0"/>
-                        <TextBlock Text="Fit Low" FontSize="12" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
+        <DataTemplate DataType="{x:Type vm:ToolItemViewModel}">
+            <StackPanel Orientation="Horizontal">
+
+                <Grid Height="32" Width="36">
+                    <ToggleButton x:Name="MainBtn" Focusable="False" Background="Transparent" BorderThickness="0"
+                                 Command="{Binding ClickCommand}">
+                        <ToggleButton.Content>
+                            <Grid>
+                                <Path Data="{Binding IconData}" Fill="#AAAAAA" Stretch="Uniform" Width="16" Height="16" 
+                                      RenderOptions.BitmapScalingMode="HighQuality"/>
+                            </Grid>
+                        </ToggleButton.Content>
+                        <ToggleButton.Style>
+                            <Style TargetType="ToggleButton">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border x:Name="Bd" Background="Transparent" CornerRadius="3" BorderThickness="1" BorderBrush="Transparent">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#3E3E42"/>
+                                                </Trigger>
+                                                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#3E3E42"/>
+                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#007ACC"/>
+                                                </DataTrigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ToggleButton.Style>
+                    </ToggleButton>
+
+                    <Popup IsOpen="{Binding IsPopupOpen, Mode=TwoWay}"
+                           PlacementTarget="{Binding ElementName=MainBtn}"
+                           Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
+                        <Border Background="#252526" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="3" Margin="0,2,0,0" Padding="2">
+                            <ItemsControl ItemsSource="{Binding SubTools}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Vertical"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Command="{Binding ClickCommand}" 
+                                                Width="28" Height="28" Margin="0,1" BorderThickness="0" Background="Transparent"
+                                                ToolTip="{Binding Name}">
+                                            <Button.Content>
+                                                <Path Data="{Binding IconData}" Fill="#CCCCCC" Stretch="Uniform" Width="14" Height="14" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                            </Button.Content>
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border x:Name="SubBd" Background="{TemplateBinding Background}" CornerRadius="2">
+                                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                                </Border>
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter TargetName="SubBd" Property="Background" Value="#007ACC"/>
+                                                                        <Setter Property="Foreground" Value="White"/>
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Border>
+                    </Popup>
+                </Grid>
+
+                <Rectangle Width="1" 
+                           Height="20" 
+                           Fill="#555555" 
+                           VerticalAlignment="Center" 
+                           Margin="2,0"
+                           Visibility="{Binding IsSeparatorVisible, Converter={StaticResource BoolToVis}}"/>
             </StackPanel>
+        </DataTemplate>
+    </UserControl.Resources>
 
-            <!-- 右侧状态区 -->
-            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
-                <TextBlock Text="MODE:" Foreground="Gray" FontSize="11" Margin="0,0,6,0"/>
-                <TextBlock Text="{Binding CurrentOperationMode}" Foreground="Cyan" FontWeight="Bold" Margin="0,0,14,0"/>
-                <TextBlock Text="Draw MODE:" Foreground="Gray" FontSize="11" Margin="0,0,6,0"/>
-                <TextBlock Text="{Binding CurrentDrawMode}" Foreground="Cyan" FontWeight="Bold" Margin="0,0,14,0"/>
-            </StackPanel>
-        </DockPanel>
+    <Border Background="#2D2D30" Padding="2">
+        <ItemsControl ItemsSource="{Binding Groups}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Orientation="Horizontal"
+                                Visibility="{Binding IsVisible, Converter={StaticResource BoolToVis}}">
+                        <StackPanel Orientation="Vertical" VerticalAlignment="Center" Margin="5,0">
+                            <TextBlock Text="{Binding Header}" 
+                                       Foreground="#999999" 
+                                       FontSize="10" 
+                                       FontWeight="SemiBold"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,4"/>
+                            <ItemsControl ItemsSource="{Binding Items}" HorizontalAlignment="Center">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </StackPanel>
+                        <Rectangle Width="1" 
+                                   Fill="#454545" 
+                                   VerticalAlignment="Stretch"/>
+
+                    </StackPanel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
     </Border>
 </UserControl>

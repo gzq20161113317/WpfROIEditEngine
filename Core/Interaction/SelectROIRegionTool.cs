@@ -27,11 +27,6 @@ namespace RoiEditor.Core.Interaction
 
         public SelectROIRegionTool(Controls.RoiEditorCanvas canvas) : base(canvas) { }
 
-        public override void OnActivated()
-        {
-            _canvas.Cursor = Cursors.Arrow;
-        }
-
         public override void OnMouseDown(MouseButtonEventArgs e)
         {
             _isMouseDown = true;

@@ -181,11 +181,12 @@ namespace RoiEditor.Controls
             {
                 { ROIOperationMode.ROI_OS_Pan, new PanTool(this) },
                 { ROIOperationMode.ROI_OS_Select, new SelectROIRegionTool(this) },
-                { ROIOperationMode.ROI_OS_ROI_Shape_Rectangle, new CreateRectTool(this) }
+                { ROIOperationMode.ROI_OS_ROI_Shape_Rectangle, new CreateRectTool(this) },
+                { ROIOperationMode.ROI_OS_ROI_Pen, new PenTool(this) }
             };
 
             _currentTool = _tools[ROIOperationMode.ROI_OS_Pan];
-            _currentTool.OnActivated();
+            _currentTool.Activate();
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -569,12 +570,13 @@ namespace RoiEditor.Controls
             if (_tools.TryGetValue(newMode, out var newTool))
             {
                 if (_currentTool == newTool) return;
-                _currentTool?.OnDeactivated();
+                _currentTool?.Deactivate();
                 _currentTool = newTool;
-                _currentTool.OnActivated();
+                _currentTool.Activate();
             }
         }
 
+        #region MouseAction
         private void OnMouseWheelZoom(object sender, MouseWheelEventArgs e)
         {
             var pos = e.GetPosition(this);
@@ -612,9 +614,63 @@ namespace RoiEditor.Controls
             _currentTool.OnMouseDown(e);
         }
 
-        protected override void OnMouseMove(MouseEventArgs e) => _currentTool.OnMouseMove(e);
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            // 如果容器是显示的，说明当前正在用自定义光标
+            // 必须先移动光标 UI，再把事件传给 Tool
+            if (CursorContainer.Visibility == Visibility.Visible)
+            {
+                // 获取鼠标相对于 Canvas 的坐标
+                var pos = e.GetPosition(this);
+                // 调用上面的位移方法
+                UpdateCursorUI(pos);
+            }
+            _currentTool.OnMouseMove(e);
+        }
         protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e) => _currentTool.OnMouseUp(e);
         protected override void OnKeyDown(KeyEventArgs e) => _currentTool.OnKeyDown(e);
+
+        protected override void OnMouseLeave(MouseEventArgs e)
+        {
+            base.OnMouseLeave(e);
+
+            // 1. 强制隐藏自定义光标容器 (红十字消失)
+            if (CursorContainer.Visibility == Visibility.Visible)
+            {
+                CursorContainer.Visibility = Visibility.Collapsed;
+            }
+
+            // 2. 强制恢复系统箭头 (让用户能看到鼠标去点别的地方)
+            // 注意：这里必须显式设为 Arrow，不能设为 null，否则可能还是 None
+            this.Cursor = Cursors.Arrow;
+        }
+
+        protected override void OnMouseEnter(MouseEventArgs e)
+        {
+            base.OnMouseEnter(e);
+
+            // 1. 如果没有工具，啥都不做
+            if (_currentTool == null) return;
+
+            // 2. 重新询问当前工具的光标策略
+            // 这就是策略模式的好处！我们不需要手动记刚才是什么状态，直接问工具就行。
+            var customView = (_currentTool as ToolBase)?.GetCustomCursorView();
+
+            if (customView != null)
+            {
+                // 如果工具想要自定义光标 (比如 CreateRectTool)
+                // 这行代码会：隐藏系统鼠标 -> 显示 CursorContainer -> 更新位置
+                SetCustomCursor(customView);
+            }
+            else
+            {
+                // 如果工具想要系统光标 (比如 SelectTool 的 Hand)
+                // 这行代码会：隐藏 CursorContainer -> 设置 this.Cursor
+                SetSystemCursor((_currentTool as ToolBase)?.SystemCursor);
+            }
+        }
+
+        #endregion
 
         /// <summary>
         /// 立即刷新：用于Zoom跨层，Fit，Resize等必须立刻更新瓦片的场景
@@ -730,6 +786,51 @@ namespace RoiEditor.Controls
 
             return bestHit;
         }
+
+        #region Cursor
+
+        internal void SetCustomCursor(UIElement view)
+        {
+            if (view == null)
+            {
+                // 如果传进来是 null，说明要恢复系统光标
+                SetSystemCursor(Cursors.Arrow);
+                return;
+            }
+
+            // 1. 隐藏系统鼠标
+            this.Cursor = Cursors.None;
+
+            // 2. 把工具传进来的 UI 塞到容器里
+            CursorContainer.Content = view;
+
+            // 3. 显示容器
+            CursorContainer.Visibility = Visibility.Visible;
+
+            // 4. 立即同步位置
+            var p = Mouse.GetPosition(this);
+            UpdateCursorUI(p);
+        }
+
+        // 【通用方法】恢复系统光标
+        internal void SetSystemCursor(Cursor cursor)
+        {
+            CursorContainer.Visibility = Visibility.Collapsed;
+            CursorContainer.Content = null; // 清空内容
+            this.Cursor = cursor ?? Cursors.Arrow;
+        }
+
+        // 【方法定义】
+        // p 是鼠标在 Canvas 上的坐标 (Point)
+        private void UpdateCursorUI(Point p)
+        {
+            // CursorTransform 是你在 XAML 里给 TranslateTransform 起的名字
+            // 通过修改它的 X, Y，显卡会直接位移 UI，不触发重新布局，性能最高
+            CursorTransform.X = p.X;
+            CursorTransform.Y = p.Y;
+        }
+
+        #endregion
 
         private bool IsPointInROIRegion(ROIRegion roi, Point p)
         {
