@@ -1,6 +1,7 @@
 ﻿using Caliburn.Micro;
 using RoiEditor.Core;
 using RoiEditor.Core.Attributes;
+using RoiEditor.Core.Helpers;
 using RoiEditor.Core.Interaction;
 using RoiEditor.Core.IO;
 using RoiEditor.Core.Memory;
@@ -10,6 +11,7 @@ using RoiEditor.Events;
 using RoiEditor.Models;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Linq;
 using System.Reflection;
@@ -124,6 +126,11 @@ namespace RoiEditor.Controls
             set => SetValue(EventAggregatorProperty, value);
         }
 
+        /// <summary>
+        /// 多选集合：这是实际的选中逻辑核心
+        /// </summary>
+        public ObservableCollection<ROIRegion> SelectedRegions { get; } = new ObservableCollection<ROIRegion>();
+
         // =========================
         // Internal State
         // =========================
@@ -132,6 +139,7 @@ namespace RoiEditor.Controls
         private readonly Dictionary<string, CancellationTokenSource> _loadingCts = new Dictionary<string, CancellationTokenSource>();
 
         private bool _isCleanedUp;
+        private bool _isInternalUpdate = false;
 
         private int _mapVersion = 0;
 
@@ -139,7 +147,6 @@ namespace RoiEditor.Controls
         private VisualHost _editorHost;
 
         private ROIRegion _hoverROIRegion;
-        private ROIRegion _activeROIRegion;
 
         private readonly List<ROIRegion> _hitTestCache = new List<ROIRegion>();
 
@@ -189,35 +196,7 @@ namespace RoiEditor.Controls
                 UpdateTiles();
             };
 
-            _tools = new Dictionary<ROIOperationMode, IInteractionTool>();
-
-            // 1. 获取当前程序集 (或者包含 Tool 的特定程序集)
-            var assembly = Assembly.GetExecutingAssembly();
-
-            // 2. 找到所有实现了 IInteractionTool 接口 且 带有 [RoiTool] 特性的类
-            var toolTypes = assembly.GetTypes()
-                .Where(t => typeof(IInteractionTool).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract)
-                .Where(t => t.GetCustomAttribute<RoiToolAttribute>() != null);
-
-            // 3. 遍历并实例化
-            foreach (var type in toolTypes)
-            {
-                // 读取特性里的 Enum 值
-                var attribute = type.GetCustomAttribute<RoiToolAttribute>();
-
-                // 创建实例：Activator.CreateInstance(类型, 构造函数参数...)
-                // 这里把 'this' (也就是当前 Canvas) 传给 Tool 的构造函数
-                var toolInstance = (IInteractionTool)Activator.CreateInstance(type, this);
-
-                // 添加到字典
-                if (!_tools.ContainsKey(attribute.Mode))
-                {
-                    _tools.Add(attribute.Mode, toolInstance);
-                }
-            }
-
-            _currentTool = _tools[ROIOperationMode.ROI_OS_Pan];
-            _currentTool.Activate();
+            InitializeTools();
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -258,16 +237,79 @@ namespace RoiEditor.Controls
         }
 
         private void OnCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
-        {           
+        {
+            bool selectionChanged = false;
+
+            // 1. 检查是否有“已选中”的物体被移除了
+            if (e.Action == NotifyCollectionChangedAction.Remove ||
+                e.Action == NotifyCollectionChangedAction.Replace ||
+                e.Action == NotifyCollectionChangedAction.Reset)
+            {
+                if (e.OldItems != null)
+                {
+                    foreach (ROIRegion item in e.OldItems)
+                    {
+                        if (SelectedRegions.Contains(item))
+                        {
+                            // 从选中列表中剔除
+                            item.IsSelected = false;
+                            item.IsEditing = false;
+                            SelectedRegions.Remove(item);
+                            selectionChanged = true;
+                        }
+                    }
+                }
+
+                // 如果是 Reset (如 Clear 操作)，直接清空选中
+                if (e.Action == NotifyCollectionChangedAction.Reset)
+                {
+                    if (SelectedRegions.Count > 0)
+                    {
+                        foreach (var r in SelectedRegions) { r.IsSelected = false; r.IsEditing = false; }
+                        SelectedRegions.Clear();
+                        selectionChanged = true;
+                    }
+                }
+            }
+
+            // 2. 如果选中项确实变少了，需要检查“主选中项(SelectedROIRegion)”是否也挂了
+            if (selectionChanged)
+            {
+                // 如果当前的主选中项已经不在 SelectedRegions 里了（说明刚被删了）
+                if (SelectedROIRegion != null && !SelectedRegions.Contains(SelectedROIRegion))
+                {
+                    // 将主权移交给列表里剩下的最后一个，或者置空
+                    var nextMain = SelectedRegions.LastOrDefault();
+
+                    // 【必须加锁】更新属性，防止触发回调死循环
+                    _isInternalUpdate = true;
+                    try
+                    {
+                        SetCurrentValue(SelectedROIRegionProperty, nextMain);
+                    }
+                    finally
+                    {
+                        _isInternalUpdate = false;
+                    }
+                }
+            }
+
+            // 3. 常规重建索引和重绘
             RebuildSpatialIndex();
             RenderStaticLayer();
-            RenderEditorLayer();
+            RenderEditorLayer(); // 这次重绘时，幽灵已经不在 SelectedRegions 里了，所以会消失
         }
 
         private static void OnSelectedROIRegionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var c = (RoiEditorCanvas)d;
-            c.ApplyExternalSelection(e.NewValue as ROIRegion);
+
+            // 如果是内部逻辑正在更新，直接返回，别捣乱
+            if (c._isInternalUpdate) return;
+
+            var newItem = e.NewValue as ROIRegion;
+            //调用内部逻辑，强制为单选模式(外部设置属性通常意味着单选)
+            c.InternalSelect(newItem,isMultiSelect:false,updateProperty:false);
         }
 
         private static void OnEventAggregatorChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -575,23 +617,33 @@ namespace RoiEditor.Controls
         private void RenderEditorLayer()
         {
             var visual = new DrawingVisual();
-            if (_activeROIRegion != null)
+            if(SelectedRegions.Count > 0)
             {
                 using (var dc = visual.RenderOpen())
                 {
-                    _renderer.DrawEditorLayer(dc, _activeROIRegion, MainMatrix.Matrix);
+                    _renderer.DrawEditorLayer(dc,SelectedRegions,MainMatrix.Matrix);
                 }
             }
             _editorHost.SetVisual(visual);
         }
 
         // =========================
-        // Interaction
+        // 模式切换回调
         // =========================
         private static void OnROIOperationModeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             if (d is RoiEditorCanvas canvas)
-                canvas.SwitchTool((ROIOperationMode)e.NewValue);
+            {
+                var newMode = (ROIOperationMode)e.NewValue;
+                canvas.SwitchTool(newMode);
+
+                // 如果切换回 Pan 模式，清空选中状态
+                // 也可以扩展逻辑：只要切出 Select/Create 模式就清空
+                if (newMode == ROIOperationMode.ROI_OS_Pan)
+                {
+                    canvas.ClearSelection();
+                }
+            }
         }
 
         private void SwitchTool(ROIOperationMode newMode)
@@ -749,9 +801,15 @@ namespace RoiEditor.Controls
             }
         }
 
-        internal void SelectROIRegion(ROIRegion item)
-        {
-            SetCurrentValue(SelectedROIRegionProperty, item);
+        /// <summary>
+        /// 核心选择方法：工具层和外部都调用这个
+        /// </summary>
+        /// <param name="item"></param>
+        /// <param name="isMultiSelect"></param>
+        internal void SelectROIRegion(ROIRegion item,bool isMultiSelect = false)
+        {        
+            //调用内部实现，允许更新属性
+            InternalSelect(item,isMultiSelect,updateProperty:true);
         }
 
         // =========================
@@ -775,6 +833,8 @@ namespace RoiEditor.Controls
 
             return new Rect(minX, minY, Math.Max(0, maxX - minX), Math.Max(0, maxY - minY));
         }
+
+
 
         internal void RebuildSpatialIndex()
         {
@@ -807,10 +867,15 @@ namespace RoiEditor.Controls
             }
         }
 
-        internal ROIRegion HitTestROIRegion(Point wPos)
+        /// <summary>
+        /// 命中测试
+        /// </summary>
+        /// <param name="wPos">世界坐标</param>
+        /// <param name="filter">可选过滤器，用于排除不想命中的物体（如被 ActiveROI 过滤）</param>
+        internal ROIRegion HitTestROIRegion(Point wPos, Predicate<ROIRegion> filter = null)
         {
             if (_spatialIndex == null)
-                return HitTestROIRegionLegacy(wPos);
+                return HitTestROIRegionLegacy(wPos, filter); // 传给 Legacy
 
             _hitTestCache.Clear();
             _spatialIndex.Query(wPos, _hitTestCache);
@@ -821,6 +886,9 @@ namespace RoiEditor.Controls
 
             foreach (var item in _hitTestCache)
             {
+                // 【过滤器检查】
+                if (filter != null && !filter(item)) continue;
+
                 if (IsPointInROIRegion(item, wPos))
                 {
                     int index = ItemsSource.IndexOf(item);
@@ -833,6 +901,57 @@ namespace RoiEditor.Controls
             }
 
             return bestHit;
+        }
+
+        private ROIRegion HitTestROIRegionLegacy(Point wPos, Predicate<ROIRegion> filter)
+        {
+            if (ItemsSource == null) return null;
+
+            for (int i = ItemsSource.Count - 1; i >= 0; i--)
+            {
+                var roi = ItemsSource[i];
+                if (roi?.Points == null || roi.Points.Count < 3) continue;
+
+                // 【过滤器检查】
+                if (filter != null && !filter(roi)) continue;
+
+                var geom = RoiRenderer.BuildGeometry(roi);
+                if (!geom.Bounds.Contains(wPos)) continue;
+
+                if (geom.FillContains(wPos)) return roi;
+
+                var pen = new Pen(Brushes.Transparent, 6.0 / Math.Max(1e-6, MainMatrix.Matrix.M11));
+                if (geom.StrokeContains(pen, wPos)) return roi;
+            }
+
+            return null;
+        }
+
+        internal void FitToCoarsestAndCenter()
+        {
+            if (string.IsNullOrEmpty(_mapService.MapPath))
+                return;
+
+            if (!_mapService.GetWorldSize(out double mapW, out double mapH))
+                return;
+
+            if (mapW <= 1 || mapH <= 1 || ActualWidth <= 1 || ActualHeight <= 1)
+                return;
+
+            double scaleFit = Math.Min(ActualWidth / mapW, ActualHeight / mapH);
+            double scale = scaleFit;
+
+            if (scale > MAX_ZOOM) scale = MAX_ZOOM;
+            if (scale < MIN_ZOOM) scale = MIN_ZOOM;
+
+            double tx = (ActualWidth * 0.5) - (mapW * 0.5) * scale;
+            double ty = 0;
+
+            MainMatrix.Matrix = new Matrix(scale, 0, 0, scale, tx, ty);
+
+            UpdateTiles();
+            RenderStaticLayer();
+            RenderEditorLayer();
         }
 
         #region Cursor
@@ -892,73 +1011,125 @@ namespace RoiEditor.Controls
             return false;
         }
 
-        private ROIRegion HitTestROIRegionLegacy(Point wPos)
+        /// <summary>
+        /// 选择Region（单选或者多选）
+        /// </summary>
+        /// <param name="item"></param>
+        /// <param name="isMultiSelect"></param>
+        /// <param name="updateProperty"></param>
+        private void InternalSelect(ROIRegion item,bool isMultiSelect,bool updateProperty)
         {
-            if (ItemsSource == null) return null;
-
-            for (int i = ItemsSource.Count - 1; i >= 0; i--)
+            //如果是单选模式，先清空现有的，并且先跳过重绘
+            if(!isMultiSelect)
             {
-                var roi = ItemsSource[i];
-                if (roi?.Points == null || roi.Points.Count < 3) continue;
-
-                var geom = RoiRenderer.BuildGeometry(roi);
-                if (!geom.Bounds.Contains(wPos)) continue;
-
-                if (geom.FillContains(wPos)) return roi;
-
-                var pen = new Pen(Brushes.Transparent, 6.0 / Math.Max(1e-6, MainMatrix.Matrix.M11));
-                if (geom.StrokeContains(pen, wPos)) return roi;
+                ClearSelection(skipRedraw:true);
             }
 
-            return null;
+            if(item != null)
+            {
+                //如果还没有选中，加进去
+                if(!SelectedRegions.Contains(item))
+                {
+                    item.IsSelected = true;
+                    SelectedRegions.Add(item);
+                }
+
+                //如果更新属性标志为真，且属性当前值不对，则更新属性
+                if(updateProperty && SelectedROIRegion != item)
+                {
+                    using (PreventRecursiveSelection())
+                    {
+                        SetCurrentValue(SelectedROIRegionProperty, item);
+                    }
+                }
+            }
+            else
+            {
+                //如果item为null且是单选模式，上面ClearSelection已经清空了
+                if(updateProperty && SelectedROIRegion != null)
+                {
+                    using (PreventRecursiveSelection())
+                    {
+                        SetCurrentValue(SelectedROIRegionProperty, null);
+                    }
+                }
+            }
+
+            RenderEditorLayer();
+            RenderStaticLayer();
         }
 
-        private void ApplyExternalSelection(ROIRegion newSelection)
+        /// <summary>
+        /// 反选：用于Shift取消某一个
+        /// </summary>
+        /// <param name="item"></param>
+        public void DeselectROIRegion(ROIRegion item)
         {
-            if (ReferenceEquals(_activeROIRegion, newSelection))
-                return;
+            if(item != null && SelectedRegions.Contains(item))
+            {
+                item.IsSelected = false;
+                item.IsEditing = false;
+                SelectedRegions.Remove(item);
+                //如果取消的正好是主选中项，移交列表最后一个(或者置空)
+                if(SelectedROIRegion == item)
+                {
+                    var nextMain = SelectedRegions.LastOrDefault();
+                    // 移交主权时加锁！
+                    using (PreventRecursiveSelection())
+                    {
+                        SetCurrentValue(SelectedROIRegionProperty, nextMain);
+                    }
+                }
 
-            if (_activeROIRegion != null) _activeROIRegion.IsSelected = false;
-
-            _activeROIRegion = newSelection;
-
-            if (_activeROIRegion != null) _activeROIRegion.IsSelected = true;
-
-            _hoverROIRegion = null;
-
-            RenderStaticLayer();
-            RenderEditorLayer();
+                RenderEditorLayer();
+                RenderStaticLayer();
+            }
         }
 
-        // =========================
-        // Fit-to-coarsest (world = level0)
-        // =========================
-
-        internal void FitToCoarsestAndCenter()
+        public void ClearSelection(bool skipRedraw = false)
         {
-            if (string.IsNullOrEmpty(_mapService.MapPath))
-                return;
+            if (SelectedRegions.Count == 0) return;
 
-            if (!_mapService.GetWorldSize(out double mapW, out double mapH))
-                return;
+            foreach(var r in SelectedRegions)
+            {
+                r.IsSelected = false;
+                r.IsEditing = false;
+            }
+            SelectedRegions.Clear();
 
-            if (mapW <= 1 || mapH <= 1 || ActualWidth <= 1 || ActualHeight <= 1)
-                return;
+            if(SelectedROIRegion != null)
+            {
+                // 清空属性时加锁
+                using (PreventRecursiveSelection())
+                {
+                    SetCurrentValue(SelectedROIRegionProperty, null);
+                }
+            }
 
-            double scaleFit = Math.Min(ActualWidth / mapW, ActualHeight / mapH);
-            double scale = scaleFit;
+            if(!skipRedraw)
+            {
+                RenderEditorLayer();
+                RenderStaticLayer();
+            }
+        }
 
-            if (scale > MAX_ZOOM) scale = MAX_ZOOM;
-            if (scale < MIN_ZOOM) scale = MIN_ZOOM;
+        // 补全工具初始化逻辑（防漏）
+        private void InitializeTools()
+        {
+            _tools = new Dictionary<ROIOperationMode, IInteractionTool>();
+            var assembly = Assembly.GetExecutingAssembly();
+            var toolTypes = assembly.GetTypes()
+                .Where(t => typeof(IInteractionTool).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract)
+                .Where(t => t.GetCustomAttribute<RoiToolAttribute>() != null);
 
-            double tx = (ActualWidth * 0.5) - (mapW * 0.5) * scale;
-            double ty = 0;
-
-            MainMatrix.Matrix = new Matrix(scale, 0, 0, scale, tx, ty);
-
-            UpdateTiles();
-            RenderStaticLayer();
-            RenderEditorLayer();
+            foreach (var type in toolTypes)
+            {
+                var attribute = type.GetCustomAttribute<RoiToolAttribute>();
+                var toolInstance = (IInteractionTool)Activator.CreateInstance(type, this);
+                if (!_tools.ContainsKey(attribute.Mode)) _tools.Add(attribute.Mode, toolInstance);
+            }
+            _currentTool = _tools.ContainsKey(ROIOperationMode.ROI_OS_Pan) ? _tools[ROIOperationMode.ROI_OS_Pan] : null;
+            _currentTool?.Activate();
         }
 
         private void RequestFitAfterLayout()
@@ -984,6 +1155,10 @@ namespace RoiEditor.Controls
             _debounceTimer.Start();
         }
 
+        private IDisposable PreventRecursiveSelection()
+        {
+            return new ScopeGuard(() => _isInternalUpdate = true, () => _isInternalUpdate = false);
+        }
 
         public void Cleanup()
         {
@@ -1035,7 +1210,6 @@ namespace RoiEditor.Controls
 
             // 7) 清空运行态引用，帮助 GC
             _hoverROIRegion = null;
-            _activeROIRegion = null;
             _spatialIndex = null;
             _hitTestCache.Clear();
 

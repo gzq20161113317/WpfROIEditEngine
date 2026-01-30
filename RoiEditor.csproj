@@ -65,6 +65,7 @@
       <DependentUpon>SimpleColorPicker.xaml</DependentUpon>
     </Compile>
     <Compile Include="Core\Attributes\RoiToolAttribute.cs" />
+    <Compile Include="Core\Helpers\ScopeGuard.cs" />
     <Compile Include="Core\Interaction\CreateRectTool.cs" />
     <Compile Include="Core\Interaction\IInteractionTool.cs" />
     <Compile Include="Core\Interaction\PanTool.cs" />

@@ -87,34 +87,50 @@ namespace RoiEditor.Core.Rendering
         /// <summary>
         /// 绘制编辑层:虚线框 + 8点手柄
         /// </summary>
-        public void DrawEditorLayer(DrawingContext dc, ROIRegion activeItem, Matrix matrix)
+        public void DrawEditorLayer(DrawingContext dc, IEnumerable<ROIRegion> regions, Matrix matrix)
         {
-            // 1. 基础检查
-            if (activeItem == null || activeItem.Points == null || activeItem.Points.Count < 2) return;
 
-            // 2. [关键修复] 复用通用的 BuildGeometry 方法
-            // 这样无论是圆、多边形还是贝塞尔，都能生成正确的形状
-            var worldGeom = BuildGeometry(activeItem);
-            if (worldGeom == null) return;
-
-            // 3. [关键修复] 使用矩阵变换将形状从 World Space -> Screen Space
-            // 这一步能保证圆形缩放后变成椭圆，多边形正确变形，且不需要手动算点
-            var transform = new MatrixTransform(matrix);
-            var screenGeom = worldGeom.GetFlattenedPathGeometry(); // 稍微平滑一下
-            screenGeom.Transform = transform; // 应用变换
-
-            // 4. 绘制选中框 (样式：半透明底 + 青色虚线边)
-            var fill = new SolidColorBrush(activeItem.Color) { Opacity = 0.25 };
-            var pen = new Pen(Brushes.Cyan, 1.0)
+            // 遍历所有选中的 Region 进行绘制
+            foreach (var region in regions)
             {
-                DashStyle = new DashStyle(new double[] { 4, 4 }, 0)
-            };
+                // 1. 基础检查
+                if (region == null || region.Points == null || region.Points.Count < 2) return;
 
-            if (fill.CanFreeze) fill.Freeze();
-            if (pen.CanFreeze) pen.Freeze();
+                // 2. [关键修复] 复用通用的 BuildGeometry 方法
+                // 这样无论是圆、多边形还是贝塞尔，都能生成正确的形状
+                var worldGeom = BuildGeometry(region);
+                if (worldGeom == null) return;
 
-            dc.DrawGeometry(fill, pen, screenGeom);
+                // 3. [关键修复] 使用矩阵变换将形状从 World Space -> Screen Space
+                // 这一步能保证圆形缩放后变成椭圆，多边形正确变形，且不需要手动算点
+                var transform = new MatrixTransform(matrix);
+                var screenGeom = worldGeom.GetFlattenedPathGeometry(); // 稍微平滑一下
+                screenGeom.Transform = transform; // 应用变换
 
+                // 4. 绘制选中框 (样式：半透明底 + 青色虚线边)
+                var fill = new SolidColorBrush(region.Color) { Opacity = 0.25 };
+                var pen = new Pen(Brushes.Cyan, 1.0)
+                {
+                    DashStyle = new DashStyle(new double[] { 4, 4 }, 0)
+                };
+
+                if (fill.CanFreeze) fill.Freeze();
+                if (pen.CanFreeze) pen.Freeze();
+
+                dc.DrawGeometry(fill, pen, screenGeom);
+
+                // 2. 绘制手柄
+                // 【策略】如果是单选，绘制全套 8 个手柄
+                // 如果是多选，为了性能和视觉清晰，可以只画边框，或者只画简单的 4 个角手柄
+                // 这里假设 regions 是 ObservableCollection，可以判断 Count
+                // 简单起见，全部画出来，或者你可以加判断
+                DrawHandles(dc, region, screenGeom);
+            }
+
+        }
+
+        private void DrawHandles(DrawingContext dc, ROIRegion activeItem, PathGeometry screenGeom)
+        {
             // ==========================================================
             // 绘制手柄 (逻辑不变，但数据源变成了变换后的 screenGeom)
             // ==========================================================
@@ -142,7 +158,6 @@ namespace RoiEditor.Core.Rendering
                 dc.DrawRectangle(_handleFill, currentHandlePen, r);
             }
         }
-
 
         public static double CalculateHandleSize(Rect bounds)
         {

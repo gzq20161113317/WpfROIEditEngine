@@ -83,6 +83,7 @@ namespace RoiEditor.Core.Interaction
             //这符合预期：拖拽过程中不需要看手柄
             _canvas.SelectROIRegion(_newItem);//SelectROIRegion会
 
+
             _canvas.CaptureMouse();
         }
 
@@ -125,7 +126,6 @@ namespace RoiEditor.Core.Interaction
                         return; // 直接返回，不执行后面的选中或提交逻辑
                     }
 
-                    _newItem.IsEditing = true;
 
                     // 新增物体，重建索引
                     _canvas.RebuildSpatialIndex();
