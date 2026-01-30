@@ -1113,7 +1113,7 @@ namespace RoiEditor.Controls
             }
         }
 
-        // 补全工具初始化逻辑（防漏）
+        // 工具初始化逻辑
         private void InitializeTools()
         {
             _tools = new Dictionary<ROIOperationMode, IInteractionTool>();

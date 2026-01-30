@@ -227,7 +227,7 @@ namespace RoiEditor.Core.Interaction
         }
 
         // ==========================================================
-        // 算法区 (保持不变)
+        // 算法区 
         // ==========================================================
 
         private void ResizeROIRegion(ROIRegion item, DragType handle, Point currentWorldPos)

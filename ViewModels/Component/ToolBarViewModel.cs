@@ -261,7 +261,10 @@ namespace RoiEditor.ViewModels.Component
             return mode == ROIOperationMode.ROI_OS_ROI_Shape_Rectangle
                 || mode == ROIOperationMode.ROI_OS_ROI_Shape_Ellipse
                 || mode == ROIOperationMode.ROI_OS_ROI_Shape_TwoPoint
-                || mode == ROIOperationMode.ROI_OS_ROI_Pen;
+                || mode == ROIOperationMode.ROI_OS_ROI_Pen
+                || mode == ROIOperationMode.ROI_OS_AutoRegion
+                || mode == ROIOperationMode.ROI_OS_FindRegion
+                || mode == ROIOperationMode.ROI_OS_Delete_Range;
         }
 
         #endregion

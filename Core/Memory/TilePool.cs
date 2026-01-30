@@ -87,7 +87,7 @@ namespace RoiEditor.Core.Memory
             // 像素风渲染 (适合晶圆图，放大不模糊而是显示像素格)
             RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.NearestNeighbor);
 
-            // 2. [新增] 关闭边缘抗锯齿 (Alias = 有锯齿/硬边)
+            // 2. 关闭边缘抗锯齿 (Alias = 有锯齿/硬边)
             // 这告诉 GPU：边缘不要做半透明混合，要么是图，要么不是。
             RenderOptions.SetEdgeMode(img, EdgeMode.Aliased);
 
