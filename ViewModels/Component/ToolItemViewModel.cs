@@ -7,10 +7,7 @@ namespace RoiEditor.ViewModels.Component
 {
     public class ToolItemViewModel : PropertyChangedBase
     {
-        // ==========================================
-        // 【新增】手动添加 Parent 属性
-        // 之前继承 Screen 时是自带的，现在需要自己定义
-        // ==========================================
+
         public object Parent { get; set; }
 
         // 直接存字符串，通知 UI 更新
@@ -40,6 +37,13 @@ namespace RoiEditor.ViewModels.Component
         {
             get { return _isActive; }
             set { _isActive = value; NotifyOfPropertyChange(() => IsActive); }
+        }
+
+        private bool _isEnabled = true; 
+        public bool IsEnabled
+        {
+            get => _isEnabled;
+            set { _isEnabled = value; NotifyOfPropertyChange(() => IsEnabled); }
         }
 
         private bool _isPopupOpen;

@@ -18,6 +18,7 @@
                             MaxLevel="{Binding MaxLevel, Mode=OneWayToSource}" 
                             CurrentLevel="{Binding CurrentLevel, Mode=OneWayToSource}"
                             EventAggregator="{Binding EventAggregator}"
+                            ActiveROI="{Binding ActiveROI}"
                             SelectedROIRegion="{Binding SelectedROIRegion, Mode=TwoWay}"
                             Background="#1E1E1E"/>
         <StatusBar Grid.Row="1">

@@ -72,6 +72,16 @@ namespace RoiEditor.Controls
             typeof(RoiEditorCanvas),
             new FrameworkPropertyMetadata(0) { BindsTwoWayByDefault = true });
 
+        public static readonly DependencyProperty ActiveROIProperty = DependencyProperty.Register(
+            nameof(ActiveROI), typeof(ROI), typeof(RoiEditorCanvas),
+            new PropertyMetadata(null));
+
+        public ROI ActiveROI
+        {
+            get => (ROI)GetValue(ActiveROIProperty);
+            set => SetValue(ActiveROIProperty, value);
+        }
+
         public int MaxLevel
         {
             get => (int)GetValue(MaxLevelProperty);

@@ -17,9 +17,9 @@ namespace SelectRoiWindows.ViewModels
         private readonly IEventAggregator _events;
         private string _statusMessage = "Ready";
 
-        public ShellViewModel(IEventAggregator events)
+        public ShellViewModel(IEventAggregator events,IWindowManager windowManager)
         {
-            RoiEditorView = new RoiMainViewModel(events);
+            RoiEditorView = new RoiMainViewModel(events, windowManager);
             _events = events;
         }
 

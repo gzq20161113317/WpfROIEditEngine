@@ -22,7 +22,8 @@ namespace RoiEditor.ViewModels.Component
         }
     }
 
-    public class ToolBarViewModel : Screen
+    public class ToolBarViewModel : Screen,
+        IHandle<ActiveROIChangedEvent>
     {
         private readonly IEventAggregator _eventAggregator;
         private ROIOperationMode _currentOperationMode = ROIOperationMode.ROI_OS_Pan;
@@ -52,6 +53,7 @@ namespace RoiEditor.ViewModels.Component
         {
             _eventAggregator = eventAggregator;
             InitializeTools();
+            UpdateToolStates(null);
         }
 
         private void InitializeTools()
@@ -90,7 +92,7 @@ namespace RoiEditor.ViewModels.Component
                 new SubToolItem { Name="Operation_Zoom_Out", ToolType=ROIOperationMode.ROI_OS_Zoom_Out, IconData=Icons.Operation_Zoom_Out},
                 new SubToolItem { Name="Operation_Zoom_Resume", ToolType=ROIOperationMode.ROI_OS_Zoom_Resume, IconData=Icons.Operation_Zoom_Resume}
             };
-            opItems.Add(CreateTool("Operation_Zoom", ROIOperationMode.ROI_OS_ROI_Shape_Rectangle, zoomTools[0].IconData.ToString(), true, zoomTools));
+            opItems.Add(CreateTool("Operation_Zoom", ROIOperationMode.ROI_OS_Zoom_In, zoomTools[0].IconData.ToString(), true, zoomTools));
             //4.Undo
             opItems.Add(CreateTool("Operation_Undo", ROIOperationMode.ROI_OS_Undo, Icons.Operation_Undo,true));
             Groups.Add(new ToolGroupViewModel { Header = "OPERATION", Items = opItems });
@@ -157,7 +159,7 @@ namespace RoiEditor.ViewModels.Component
                 // 2. 通知 Canvas 切换
                 CurrentOperationMode = selected.ToolType;
 
-                //3.高亮
+                //3.互斥高亮
                 foreach (var group in Groups)
                 {
 
@@ -210,6 +212,59 @@ namespace RoiEditor.ViewModels.Component
             _booleanGroup.Items[0].IsActive = (_currentDrawMode == ROIDrawMode.ROI_DS_Union);
             _booleanGroup.Items[1].IsActive = (_currentDrawMode == ROIDrawMode.ROI_DS_Exclude);
         }
+
+        #region Handle
+
+        // 处理事件：当 ROI 选中状态改变时
+        public void Handle(ActiveROIChangedEvent message)
+        {
+            UpdateToolStates(message.ActiveROI);
+        }
+
+        // 【核心逻辑】根据是否有 ActiveROI 更新按钮可用性
+        private void UpdateToolStates(ROI activeRoi)
+        {
+            // 只有当 activeRoi 不为空时，允许绘图
+            bool canDraw = (activeRoi != null);
+
+            foreach (var group in Groups)
+            {
+                foreach (var tool in group.Items)
+                {
+                    // 判断该工具是否是“创建类”工具
+                    if (IsCreationTool(tool.ToolType))
+                    {
+                        tool.IsEnabled = canDraw;
+                    }
+                    else
+                    {
+                        // 像 Pan(平移), Zoom(缩放), Select(选择) 这种工具，永远可用
+                        tool.IsEnabled = true;
+                    }
+
+                    // 处理下拉菜单里的工具
+                    if (tool.SubTools != null)
+                    {
+                        foreach (var sub in tool.SubTools)
+                        {
+                            if (IsCreationTool(sub.ToolType))
+                                sub.IsEnabled = canDraw;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 辅助方法：定义哪些是需要 ROI 才能用的工具
+        private bool IsCreationTool(ROIOperationMode mode)
+        {
+            return mode == ROIOperationMode.ROI_OS_ROI_Shape_Rectangle
+                || mode == ROIOperationMode.ROI_OS_ROI_Shape_Ellipse
+                || mode == ROIOperationMode.ROI_OS_ROI_Shape_TwoPoint
+                || mode == ROIOperationMode.ROI_OS_ROI_Pen;
+        }
+
+        #endregion
 
         protected override void OnActivate()
         {

@@ -42,37 +42,7 @@
             </Grid.RowDefinitions>
 
             <!-- RoiList (Row 0) -->
-            <Border Grid.Row="0"
-                    Background="#252526"
-                    BorderBrush="#444"
-                    BorderThickness="1,0,0,1"
-                    Padding="8">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-
-                    <TextBlock Text="ROI LIST" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,6"/>
-
-                    <!-- 你可以用 ListBox / DataGrid / ListView，这里用 ListBox 最简单 -->
-                    <ListBox Grid.Row="1"
-                             ItemsSource="{Binding ROIRegionList}"
-                             SelectedItem="{Binding SelectedROIRegion, Mode=TwoWay}"
-                             Background="#1E1E1E"
-                             BorderBrush="#3F3F46"
-                             Foreground="White">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Margin="4">
-                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
-                                    <TextBlock Text="{Binding Type}" Foreground="Gray" FontSize="11"/>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                </Grid>
-            </Border>
+            <ContentControl x:Name="ROIListVM" />
 
             <!-- Details / Parameters (Row 1) -->
             <Border Grid.Row="1"

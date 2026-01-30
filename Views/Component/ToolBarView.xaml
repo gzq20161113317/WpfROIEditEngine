@@ -18,6 +18,7 @@
 
                 <Grid Height="32" Width="36">
                     <ToggleButton x:Name="MainBtn" Focusable="False" Background="Transparent" BorderThickness="0"
+                                  IsEnabled="{Binding IsEnabled}"
                                  Command="{Binding ClickCommand}">
                         <ToggleButton.Content>
                             <Grid>
@@ -41,6 +42,9 @@
                                                     <Setter TargetName="Bd" Property="Background" Value="#3E3E42"/>
                                                     <Setter TargetName="Bd" Property="BorderBrush" Value="#007ACC"/>
                                                 </DataTrigger>
+                                                <Trigger Property="IsEnabled" Value="False">
+                                                    <Setter TargetName="Bd" Property="Opacity" Value="0.2"/>
+                                                </Trigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>
                                     </Setter.Value>
@@ -63,6 +67,7 @@
                                     <DataTemplate>
                                         <Button Command="{Binding ClickCommand}" 
                                                 Width="28" Height="28" Margin="0,1" BorderThickness="0" Background="Transparent"
+                                                IsEnabled="{Binding IsEnabled}"
                                                 ToolTip="{Binding Name}">
                                             <Button.Content>
                                                 <Path Data="{Binding IconData}" Fill="#CCCCCC" Stretch="Uniform" Width="14" Height="14" RenderOptions.BitmapScalingMode="HighQuality"/>
@@ -79,6 +84,9 @@
                                                                     <Trigger Property="IsMouseOver" Value="True">
                                                                         <Setter TargetName="SubBd" Property="Background" Value="#007ACC"/>
                                                                         <Setter Property="Foreground" Value="White"/>
+                                                                    </Trigger>
+                                                                    <Trigger Property="IsEnabled" Value="False">
+                                                                        <Setter TargetName="SubBd" Property="Opacity" Value="0.2"/>
                                                                     </Trigger>
                                                                 </ControlTemplate.Triggers>
                                                             </ControlTemplate>

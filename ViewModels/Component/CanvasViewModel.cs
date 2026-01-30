@@ -10,13 +10,16 @@ using System.Threading.Tasks;
 
 namespace RoiEditor.ViewModels.Component
 {
-    public class CanvasViewModel:Screen, IHandle<ROIOperationModeChangedEvent>
+    public class CanvasViewModel:Screen, 
+        IHandle<ROIOperationModeChangedEvent>,
+        IHandle<ActiveROIChangedEvent>
     {
         private readonly IEventAggregator _eventAggregator;
         private ROIOperationMode _currentOperationMode = ROIOperationMode.ROI_OS_Pan;
         private string _mapPath;
         private int _currentLevel;
         private int _maxLevel;
+        private ROI _activeROI;
         private ROIRegion _selectedROIRegion;
 
         /// <summary>
@@ -74,6 +77,12 @@ namespace RoiEditor.ViewModels.Component
             }
         }
 
+        public ROI ActiveROI
+        {
+            get => _activeROI;
+            set { _activeROI = value; NotifyOfPropertyChange(() => ActiveROI); }
+        }
+
         // 当前选中 ROI
         public ROIRegion SelectedROIRegion
         {
@@ -84,6 +93,11 @@ namespace RoiEditor.ViewModels.Component
                 _selectedROIRegion = value;
                 NotifyOfPropertyChange(() => SelectedROIRegion);
             }
+        }
+
+        public void Handle(ActiveROIChangedEvent message)
+        {
+            ActiveROI = message.ActiveROI;
         }
 
         public void Handle(ROIOperationModeChangedEvent message)

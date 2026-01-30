@@ -12,26 +12,44 @@ namespace RoiEditor.Models
 {
     public class ROIRegion : PropertyChangedBase
     {
-        private bool _isSelected;
-        private bool _isEditing;
+        private Guid _id;
+        private string _name;
+        private ROIRegionType _type;
         private List<Point> _points;
         private Color _color = Colors.Yellow;
+        private bool _isSelected;
+        private bool _isEditing;
 
-        public int Id { get; set; }
-        public string Name { get; set; }
+        public ROI Parent { get; set; }
 
-        private ROIRegionType _type;
+        public Guid Id
+        {
+            get => _id;
+            set { _id = value; NotifyOfPropertyChange(() => Id); }
+        }
+
+        public string Name
+        {
+            get => _name;
+            set { _name = value; NotifyOfPropertyChange(() => Name); }
+        }
 
         public ROIRegionType Type
         {
-            get { return _type; }
-            set 
-            { 
-                _type = value;
-                NotifyOfPropertyChange(() => Type);
-            }
+            get => _type;
+            set { _type = value; NotifyOfPropertyChange(() => Type); }
         }
 
+        public List<Point> Points
+        {
+            get => _points;
+            set
+            {
+                _points = value;
+                NotifyOfPropertyChange(() => Points);
+                NotifyOfPropertyChange(() => Center);
+            }
+        }
 
         public Color Color
         {
@@ -39,36 +57,18 @@ namespace RoiEditor.Models
             set { _color = value; NotifyOfPropertyChange(() => Color); }
         }
 
-        // 物理坐标集合
-        public List<Point> Points
-        {
-            get => _points;
-            set { _points = value; NotifyOfPropertyChange(() => Points); }
-        }
-
         public bool IsSelected
         {
             get => _isSelected;
-            set 
-            { 
-                _isSelected = value;
-                if (!_isSelected) IsEditing = false;
-                NotifyOfPropertyChange(() => IsSelected);
-            }
+            set { _isSelected = value; NotifyOfPropertyChange(() => IsSelected); }
         }
 
         public bool IsEditing
         {
-            get { return _isEditing; }
-            set 
-            { 
-                _isEditing = value;
-                NotifyOfPropertyChange(() => IsEditing);
-            }
+            get => _isEditing;
+            set { _isEditing = value; NotifyOfPropertyChange(() => IsEditing); }
         }
 
-
-        // 辅助：获取中心点
         public Point Center
         {
             get
@@ -78,6 +78,17 @@ namespace RoiEditor.Models
                 foreach (var p in Points) { x += p.X; y += p.Y; }
                 return new Point(x / Points.Count, y / Points.Count);
             }
+        }
+
+        public ROIRegion()
+        {
+            Id = Guid.NewGuid();
+            Points = new List<Point>();
+        }
+
+        public void UpdateColorFromParent()
+        {
+            if (Parent != null) Color = Parent.Color;
         }
     }
 }

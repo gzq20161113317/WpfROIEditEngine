@@ -16,6 +16,7 @@ namespace RoiEditor.Core.Interaction
     {
         private ROIRegion _newItem;
         private Point _startPoint;
+        private bool _isCreating;
 
         public CreateRectTool(Controls.RoiEditorCanvas canvas) : base(canvas) { }
 
@@ -52,19 +53,30 @@ namespace RoiEditor.Core.Interaction
 
         public override void OnMouseDown(MouseButtonEventArgs e)
         {
+            if (e.LeftButton != MouseButtonState.Pressed) return;
+
+            // 【关键检查】必须先选择一个 ROI 容器才能开始画
+            if (_canvas.ActiveROI == null)
+            {
+                MessageBox.Show("Please select or create an ROI first.", "Warning");
+                return;
+            }
+
             _startPoint = GetWorldPosition(e);
+            _isCreating = true;
 
             _newItem = new ROIRegion
             {
-                Name = "New Region",
-                Color = Colors.Lime,
+                Id = Guid.NewGuid(),
+                Name = $"Rect {_canvas.ActiveROI.Regions.Count + 1}",
                 Type = ROIRegionType.Rectangle,
-                Points = new List<Point> { _startPoint, _startPoint, _startPoint, _startPoint }
+                Points = new List<Point> { _startPoint, _startPoint, _startPoint, _startPoint },
             };
 
-            // 临时添加到 Canvas 显示，但还没加到 ItemsSource (或者先加进去)
-            // 简单做法：直接加到 ItemsSource
-            _canvas.ItemsSource?.Add(_newItem);
+            // 【关键步骤】加入到 ActiveROI 的子列表中
+            // 注意：不要直接加到 Canvas.ItemsSource！
+            // ViewModel 的同步机制会把它自动推送到 Canvas
+            _canvas.ActiveROI.Regions.Add(_newItem);
 
             //2.选中它(IsSelected = true)
             //此时因为IsEditing还是false，所以屏幕上只会显示青色虚线框，不会显示手柄
@@ -76,7 +88,7 @@ namespace RoiEditor.Core.Interaction
 
         public override void OnMouseMove(MouseEventArgs e)
         {
-            if (_newItem == null) return;
+            if (!_isCreating || _newItem == null) return;
 
             var wPos = GetWorldPosition(e);
 
@@ -91,43 +103,48 @@ namespace RoiEditor.Core.Interaction
 
         public override void OnMouseUp(MouseButtonEventArgs e)
         {
-            if (_newItem != null)
+            if(_isCreating)
             {
-                // 规范化矩形 (处理负宽高)
-                NormalizeRectPoints(_newItem.Points);
-
-                Rect bounds = GetBoundingRect(_newItem.Points);
-
-                // 判断：宽 和 高 都小于 2
-                if (bounds.Width < 2.0 && bounds.Height < 2.0)
+                _isCreating = false;
+                if (_newItem != null)
                 {
-                    // 视为无效绘制：从画布中移除刚才 MouseDown 创建的临时对象
-                    _canvas.ItemsSource?.Remove(_newItem);
-                    // 清理状态
-                    _canvas.SelectROIRegion(null);
+                    // 规范化矩形 (处理负宽高)
+                    NormalizeRectPoints(_newItem.Points);
+
+                    Rect bounds = GetBoundingRect(_newItem.Points);
+
+                    // 判断：宽 和 高 都小于 2
+                    if (bounds.Width < 2.0 && bounds.Height < 2.0)
+                    {
+                        // 视为无效绘制：从画布中移除刚才 MouseDown 创建的临时对象
+                        _canvas.ItemsSource?.Remove(_newItem);
+                        // 清理状态
+                        _canvas.SelectROIRegion(null);
+                        _newItem = null;
+                        _canvas.ReleaseMouseCapture();
+                        return; // 直接返回，不执行后面的选中或提交逻辑
+                    }
+
+                    _newItem.IsEditing = true;
+
+                    // 新增物体，重建索引
+                    _canvas.RebuildSpatialIndex();
+
+                    // 4. 画完一个后，自动切回“选择工具”
+                    // 除非设计是“连续画框模式”，否则切回 Select 体验更好
+                    //_canvas.Mode = DrawMode.Select;
+
+                    // 5. 刷新视图 (确保手柄显示出来)
+                    _canvas.RedrawEditorLayer();
+
                     _newItem = null;
                     _canvas.ReleaseMouseCapture();
-                    return; // 直接返回，不执行后面的选中或提交逻辑
+
+                    // 自动切回选择模式？(很多软件画完一个会自动切回，看你需求)
+                    // _canvas.Mode = DrawMode.Select; 
                 }
-
-                _newItem.IsEditing = true;
-
-                // 新增物体，重建索引
-                _canvas.RebuildSpatialIndex();
-
-                // 4. 画完一个后，自动切回“选择工具”
-                // 除非设计是“连续画框模式”，否则切回 Select 体验更好
-                //_canvas.Mode = DrawMode.Select;
-
-                // 5. 刷新视图 (确保手柄显示出来)
-                _canvas.RedrawEditorLayer();
-
-                _newItem = null;
-                _canvas.ReleaseMouseCapture();
-
-                // 自动切回选择模式？(很多软件画完一个会自动切回，看你需求)
-                // _canvas.Mode = DrawMode.Select; 
             }
+           
         }
 
         private void NormalizeRectPoints(List<Point> pts)
