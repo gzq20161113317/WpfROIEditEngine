@@ -1,9 +1,12 @@
-﻿using System.Windows;
+﻿using RoiEditor.Core.Attributes;
+using RoiEditor.Enums;
+using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 
 namespace RoiEditor.Core.Interaction
 {
+    [RoiTool(ROIOperationMode.ROI_OS_Pan)]
     public class PanTool : ToolBase
     {
         private bool _isPanning;

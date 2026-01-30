@@ -1,4 +1,5 @@
-﻿using RoiEditor.Enums;
+﻿using RoiEditor.Core.Attributes;
+using RoiEditor.Enums;
 using RoiEditor.Models;
 using System;
 using System.Collections.Generic;
@@ -10,6 +11,7 @@ using System.Windows.Shapes;
 
 namespace RoiEditor.Core.Interaction
 {
+    [RoiTool(ROIOperationMode.ROI_OS_ROI_Shape_Rectangle)]
     public class CreateRectTool : ToolBase
     {
         private ROIRegion _newItem;

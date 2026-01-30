@@ -61,12 +61,14 @@
     <Compile Include="Controls\RoiEditorCanvas.xaml.cs">
       <DependentUpon>RoiEditorCanvas.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Core\Attributes\RoiToolAttribute.cs" />
     <Compile Include="Core\Interaction\CreateRectTool.cs" />
     <Compile Include="Core\Interaction\IInteractionTool.cs" />
     <Compile Include="Core\Interaction\PanTool.cs" />
     <Compile Include="Core\Interaction\PenTool.cs" />
     <Compile Include="Core\Interaction\SelectROIRegionTool.cs" />
     <Compile Include="Core\Interaction\ToolBase.cs" />
+    <Compile Include="Core\Interaction\ZoomResumeTool.cs" />
     <Compile Include="Core\IO\MapService.cs" />
     <Compile Include="Core\Memory\LruCache.cs" />
     <Compile Include="Core\QuadTree.cs" />

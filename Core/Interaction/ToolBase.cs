@@ -23,6 +23,9 @@ namespace RoiEditor.Core.Interaction
         // 如果子类不重写 CustomCursorView，就用这个
         public virtual Cursor SystemCursor => Cursors.Arrow;
 
+        // 默认是长效工具
+        public virtual bool IsActionOnly => false;
+
         // 选项 B：使用自定义 UI 光标
         // 默认返回 null (代表不使用自定义，用系统光标)
         public virtual UIElement GetCustomCursorView() => null;

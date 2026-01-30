@@ -29,6 +29,8 @@ namespace RoiEditor.ViewModels.Component
         private ROIDrawMode _currentDrawMode = ROIDrawMode.ROI_DS_Union;
         private ToolGroupViewModel _booleanGroup;
 
+        private ROIOperationMode _lastActiveStateMode = ROIOperationMode.ROI_OS_Pan;
+
         public BindableCollection<ToolGroupViewModel> Groups { get; set; } = new BindableCollection<ToolGroupViewModel>();
 
         #region Prop
@@ -141,15 +143,21 @@ namespace RoiEditor.ViewModels.Component
             // 逻辑处理：如果是纯动作（如删除），执行特定逻辑；否则切换模式
             if (selected.IsActionOnly)
             {
-                // 处理删除等瞬时动作
-                //if (selected.ToolType == ROIOperationMode.ROI_OS_Delete_Range)
-                //    _eventAggregator.PublishOnUIThreadAsync(new DeleteRoiEvent());
+                /// 1. 【发射信号】强制通知 Canvas 执行动作
+                CurrentOperationMode = selected.ToolType;
+
+                // 2. 【状态回弹】马上把 ViewModel 的状态切回刚才的工具
+                CurrentOperationMode = _lastActiveStateMode;
             }
             else
             {
-                // 统一切换模式
+                // 1. 记录这个模式，方便下次“回弹”回来
+                _lastActiveStateMode = selected.ToolType;
+
+                // 2. 通知 Canvas 切换
                 CurrentOperationMode = selected.ToolType;
 
+                //3.高亮
                 foreach (var group in Groups)
                 {
 

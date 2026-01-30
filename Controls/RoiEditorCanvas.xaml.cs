@@ -1,5 +1,6 @@
 ﻿using Caliburn.Micro;
 using RoiEditor.Core;
+using RoiEditor.Core.Attributes;
 using RoiEditor.Core.Interaction;
 using RoiEditor.Core.IO;
 using RoiEditor.Core.Memory;
@@ -11,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -28,7 +30,7 @@ namespace RoiEditor.Controls
     /// - 未选中 ROI：StaticLayer（WorldContainer 下）
     /// - 选中 ROI：EditorLayer（Screen Space）
     /// </summary>
-    public partial class RoiEditorCanvas : UserControl, IHandle<FitToCoarsestRequestEvent>
+    public partial class RoiEditorCanvas : UserControl
     {
         private const double MIN_ZOOM = 0.01;
         private const double MAX_ZOOM = 200.0;
@@ -177,13 +179,32 @@ namespace RoiEditor.Controls
                 UpdateTiles();
             };
 
-            _tools = new Dictionary<ROIOperationMode, IInteractionTool>
+            _tools = new Dictionary<ROIOperationMode, IInteractionTool>();
+
+            // 1. 获取当前程序集 (或者包含 Tool 的特定程序集)
+            var assembly = Assembly.GetExecutingAssembly();
+
+            // 2. 找到所有实现了 IInteractionTool 接口 且 带有 [RoiTool] 特性的类
+            var toolTypes = assembly.GetTypes()
+                .Where(t => typeof(IInteractionTool).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract)
+                .Where(t => t.GetCustomAttribute<RoiToolAttribute>() != null);
+
+            // 3. 遍历并实例化
+            foreach (var type in toolTypes)
             {
-                { ROIOperationMode.ROI_OS_Pan, new PanTool(this) },
-                { ROIOperationMode.ROI_OS_Select, new SelectROIRegionTool(this) },
-                { ROIOperationMode.ROI_OS_ROI_Shape_Rectangle, new CreateRectTool(this) },
-                { ROIOperationMode.ROI_OS_ROI_Pen, new PenTool(this) }
-            };
+                // 读取特性里的 Enum 值
+                var attribute = type.GetCustomAttribute<RoiToolAttribute>();
+
+                // 创建实例：Activator.CreateInstance(类型, 构造函数参数...)
+                // 这里把 'this' (也就是当前 Canvas) 传给 Tool 的构造函数
+                var toolInstance = (IInteractionTool)Activator.CreateInstance(type, this);
+
+                // 添加到字典
+                if (!_tools.ContainsKey(attribute.Mode))
+                {
+                    _tools.Add(attribute.Mode, toolInstance);
+                }
+            }
 
             _currentTool = _tools[ROIOperationMode.ROI_OS_Pan];
             _currentTool.Activate();
@@ -567,12 +588,29 @@ namespace RoiEditor.Controls
         {
             if (_tools == null) return;
 
+            // 1. 尝试从字典里拿出工具 (不管是 Pen 还是 FitToScreen，都在字典里)
             if (_tools.TryGetValue(newMode, out var newTool))
             {
-                if (_currentTool == newTool) return;
-                _currentTool?.Deactivate();
-                _currentTool = newTool;
-                _currentTool.Activate();
+                // 2. 【通用逻辑】判断工具类型
+                if (newTool.IsActionOnly)
+                {
+                    // A. 如果是瞬时动作 (Action)
+                    // 直接激活执行逻辑，执行完就拉倒
+                    // 不替换 _currentTool，不影响当前状态
+                    newTool.Activate();
+                }
+                else
+                {
+                    // B. 如果是长效工具 (State)
+                    if (_currentTool == newTool) return;
+
+                    _currentTool?.Deactivate();
+                    _currentTool = newTool;
+                    _currentTool.Activate();
+
+                    // 同步配置页
+                    //CurrentSettings = _currentTool.SettingsViewModel;
+                }
             }
         }
 
@@ -885,9 +923,8 @@ namespace RoiEditor.Controls
         // =========================
         // Fit-to-coarsest (world = level0)
         // =========================
-        public void Handle(FitToCoarsestRequestEvent message) => FitToCoarsestAndCenter();
 
-        private void FitToCoarsestAndCenter()
+        internal void FitToCoarsestAndCenter()
         {
             if (string.IsNullOrEmpty(_mapService.MapPath))
                 return;

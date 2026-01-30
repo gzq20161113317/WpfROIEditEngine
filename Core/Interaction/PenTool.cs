@@ -1,4 +1,6 @@
-﻿using System;
+﻿using RoiEditor.Core.Attributes;
+using RoiEditor.Enums;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -7,6 +9,7 @@ using System.Windows.Input;
 
 namespace RoiEditor.Core.Interaction
 {
+    [RoiTool(ROIOperationMode.ROI_OS_ROI_Pen)]
     public class PenTool : ToolBase
     {
         public override Cursor SystemCursor => Cursors.Pen;

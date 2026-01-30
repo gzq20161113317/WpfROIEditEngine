@@ -12,6 +12,10 @@ namespace RoiEditor.Core.Interaction
     /// </summary>
     public interface IInteractionTool
     {
+        // true: 干完活(Activate)就结束，不替换 _currentTool
+        // false: (默认) 长效工具，需要替换 _currentTool 并接管鼠标
+        bool IsActionOnly { get; }
+
         // 工具被激活时触发 (如切换光标)
         void Activate();
 

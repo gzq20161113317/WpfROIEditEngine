@@ -1,4 +1,6 @@
-﻿using RoiEditor.Core.Rendering;
+﻿using RoiEditor.Core.Attributes;
+using RoiEditor.Core.Rendering;
+using RoiEditor.Enums;
 using RoiEditor.Models;
 using System;
 using System.Collections.Generic;
@@ -14,6 +16,7 @@ namespace RoiEditor.Core.Interaction
         None, Body, TopLeft, Top, TopRight, Right, BottomRight, Bottom, BottomLeft, Left
     }
 
+    [RoiTool(ROIOperationMode.ROI_OS_Select)]
     public class SelectROIRegionTool : ToolBase
     {
         private DragType _dragMode = DragType.None;
