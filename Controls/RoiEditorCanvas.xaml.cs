@@ -131,6 +131,9 @@ namespace RoiEditor.Controls
         /// </summary>
         public ObservableCollection<ROIRegion> SelectedRegions { get; } = new ObservableCollection<ROIRegion>();
 
+        //获取有效区 (代理 MapService)
+        public Rect ValidRegion => _mapService.EffectiveRegion;
+
         // =========================
         // Internal State
         // =========================
@@ -325,35 +328,47 @@ namespace RoiEditor.Controls
         public void ReloadMap(string path)
         {
             if (string.IsNullOrEmpty(path)) return;
-            if (!System.IO.Directory.Exists(path)) return;
 
+            // 【关键修改】不再只判断文件夹，而是“不存在文件夹 且 不存在文件”才退出
+            if (!System.IO.Directory.Exists(path) && !System.IO.File.Exists(path))
+                return;
+
+            // 1. 加载地图数据 (MapService 会自动识别单图/切片)
             _mapService.LoadMap(path);
             MaxLevel = _mapService.MaxLevel;
 
+            // 2. 版本号递增 (让旧的异步加载失效)
             Interlocked.Increment(ref _mapVersion);
 
+            // 3. 清理旧缓存和加载任务
             _tileLoader.ClearCache();
             CancelAllLoading();
 
-            // 回收显示瓦片
+            // 4. 回收当前显示的瓦片
             foreach (var img in _visibleTiles.Values.ToList())
                 _tilePool.Return(img);
 
             _visibleTiles.Clear();
             _loadingTiles.Clear();
 
-            // ROIRegion 空间索引：世界尺寸会变化
+            // 5. 重建空间索引 (世界尺寸变了，索引必须重置)
             RebuildSpatialIndex();
 
-            // 初始化视图：默认从最粗层开始（避免一上来冲进 Level0 高清）
+            // 6. 计算初始缩放
+            // 单图模式下 MaxLevel=0，initialScale=1.0，这没问题
+            // 后面的 FitToCoarsestAndCenter 会再次修正它
             double initialScale = 1.0 / Math.Pow(2, _mapService.MaxLevel);
             MainMatrix.Matrix = new Matrix(initialScale, 0, 0, initialScale, 0, 0);
 
-            // 如果控件已布局完成，则 Fit；否则等 Loaded 后 Fit
+            // 7. 适配视图 (Fit)
             if (IsLoaded && ActualWidth > 1 && ActualHeight > 1)
+            {
                 FitToCoarsestAndCenter();
+            }
             else
+            {
                 RequestFitAfterLayout();
+            }
         }
 
         private void CancelAllLoading()
@@ -374,6 +389,22 @@ namespace RoiEditor.Controls
         {
             if (string.IsNullOrEmpty(_mapService.MapPath)) return;
             if (ActualWidth <= 1 || ActualHeight <= 1) return;
+
+            // === 单图模式分支 ===
+            if (_mapService.IsSingleFileMode)
+            {
+                string key = "0_0_0"; // 假装它是唯一的瓦片
+                if (_loadingTiles.Contains(key) || _visibleTiles.ContainsKey(key)) return;
+
+                _mapService.GetWorldSize(out double w, out double h);
+                var cts = new CancellationTokenSource();
+                _loadingCts[key] = cts;
+                _loadingTiles.Add(key);
+
+                // 传入整图尺寸 w, h
+                _ = LoadTileAsync(key, _mapService.MapPath, 0, 0, w, h, _mapVersion, 0, cts.Token);
+                return; // [关键] 直接返回，不跑下面的瓦片逻辑
+            }
 
             Matrix m = MainMatrix.Matrix;
 
@@ -490,13 +521,14 @@ namespace RoiEditor.Controls
                 _loadingCts[k] = cts;
                 _loadingTiles.Add(k);
 
-                _ = LoadTileAsync(k, tilePath, x, y, tileWorld, _mapVersion,targetLevel, cts.Token);
+                // 传入 tileWorld 作为宽高
+                _ = LoadTileAsync(k, tilePath, x, y, tileWorld, tileWorld, _mapVersion, targetLevel, cts.Token);
             }
 
         }
 
         private async Task LoadTileAsync(string key, string path, double x, double y,
-            double tileWorld, 
+            double width,double height,
             int mapVersion, 
             int expectedLevel,
             CancellationToken token)
@@ -549,8 +581,8 @@ namespace RoiEditor.Controls
                     img.Source = imgSource;
                     // 缝隙修复：轻微 overlap
                     double overlap = 1.0;
-                    img.Width = tileWorld + overlap;
-                    img.Height = tileWorld + overlap;
+                    img.Width = width + overlap;
+                    img.Height = height + overlap;
                     img.Visibility = Visibility.Visible;
 
                     Canvas.SetLeft(img,x);
@@ -599,16 +631,42 @@ namespace RoiEditor.Controls
         // =========================
         private void RenderStaticLayer()
         {
-            if (ItemsSource == null)
-            {
-                _staticHost.SetVisual(null);
-                return;
-            }
-
             var visual = new DrawingVisual();
             using (var dc = visual.RenderOpen())
             {
-                _renderer.DrawStaticLayer(dc, ItemsSource, _hoverROIRegion, MainMatrix.Matrix.M11);
+                // 1. 绘制有效区域 (Valid Region)
+                if (!_mapService.EffectiveRegion.IsEmpty)
+                {
+                    double zoom = Math.Max(1e-6, MainMatrix.Matrix.M11);
+                    double strokeWidth = 1.0 / zoom;
+
+                    var pen = new Pen(Brushes.Yellow, strokeWidth);
+
+                    // 虚线标准间隔是 4 倍线宽 (2倍实线 + 2倍间隔)
+                    // 计算如果画满一圈，大概有多少个 Dash
+                    double perimeter = _mapService.EffectiveRegion.Width * 2 + _mapService.EffectiveRegion.Height * 2;
+                    double estimatedDashCount = perimeter / (strokeWidth * 4);
+
+                    // 阈值设为 5000 (经验值：超过这个数量 WPF 可能会渲染异常)
+                    if (estimatedDashCount < 5000)
+                    {
+                        pen.DashStyle = DashStyles.Dash; // 数量少时，用虚线
+                    }
+                    else
+                    {
+                        pen.DashStyle = DashStyles.Solid; // 数量太多，降级为实线，防止渲染残留
+                    }
+
+                    if (pen.CanFreeze) pen.Freeze();
+
+                    dc.DrawRectangle(null, pen, _mapService.EffectiveRegion);
+                }
+
+                // 2. 绘制静态 ROI
+                if (ItemsSource != null)
+                {
+                    _renderer.DrawStaticLayer(dc, ItemsSource, _hoverROIRegion, MainMatrix.Matrix.M11);
+                }
             }
 
             _staticHost.SetVisual(visual);
@@ -1084,6 +1142,38 @@ namespace RoiEditor.Controls
                 RenderEditorLayer();
                 RenderStaticLayer();
             }
+        }
+
+        /// <summary>
+        /// 点坐标钳制：保证点在有效区内
+        /// </summary>
+        /// <param name="p"></param>
+        /// <returns></returns>
+        public Point ClampToValidRegion(Point p)
+        {
+            if (ValidRegion.IsEmpty) return p;
+
+            double x = Math.Max(ValidRegion.Left, Math.Min(ValidRegion.Right, p.X));
+            double y = Math.Max(ValidRegion.Top, Math.Min(ValidRegion.Bottom, p.Y));
+            return new Point(x, y);
+        }
+
+        // 矩形钳制：用于拖拽整个 ROI 时，保证不拖出去
+        public Rect ClampRectToValidRegion(Rect r)
+        {
+            if (ValidRegion.IsEmpty) return r;
+
+            double x = r.X;
+            double y = r.Y;
+
+            // 简单的平移限制：如果左边出去了就贴左边，右边出去了就贴右边
+            if (x < ValidRegion.Left) x = ValidRegion.Left;
+            if (x + r.Width > ValidRegion.Right) x = ValidRegion.Right - r.Width;
+
+            if (y < ValidRegion.Top) y = ValidRegion.Top;
+            if (y + r.Height > ValidRegion.Bottom) y = ValidRegion.Bottom - r.Height;
+
+            return new Rect(x, y, r.Width, r.Height);
         }
 
         public void ClearSelection(bool skipRedraw = false)

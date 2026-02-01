@@ -55,14 +55,22 @@ namespace RoiEditor.Core.Interaction
         {
             if (e.LeftButton != MouseButtonState.Pressed) return;
 
-            // 【关键检查】必须先选择一个 ROI 容器才能开始画
+            // 必须先选择一个 ROI 容器才能开始画
             if (_canvas.ActiveROI == null)
             {
                 MessageBox.Show("Please select or create an ROI first.", "Warning");
                 return;
             }
 
-            _startPoint = GetWorldPosition(e);
+            var wPos = GetWorldPosition(e);
+
+            // 如果有效区存在，且当前点击位置不在有效区内，直接 return，啥都不做
+            if (!_canvas.ValidRegion.IsEmpty && !_canvas.ValidRegion.Contains(wPos))
+            {
+                return;
+            }
+
+            _startPoint = wPos;
             _isCreating = true;
 
             _newItem = new ROIRegion
@@ -93,6 +101,9 @@ namespace RoiEditor.Core.Interaction
 
             var wPos = GetWorldPosition(e);
 
+            // 限制鼠标坐标在有效区内
+            wPos = _canvas.ClampToValidRegion(wPos);
+
             // 更新矩形四个点
             _newItem.Points[1] = new Point(wPos.X, _startPoint.Y);
             _newItem.Points[2] = new Point(wPos.X, wPos.Y);
@@ -115,15 +126,14 @@ namespace RoiEditor.Core.Interaction
                     Rect bounds = GetBoundingRect(_newItem.Points);
 
                     // 判断：宽 和 高 都小于 2
-                    if (bounds.Width < 2.0 && bounds.Height < 2.0)
+                    if (bounds.Width < 5.0 || bounds.Height < 5.0)
                     {
-                        // 视为无效绘制：从画布中移除刚才 MouseDown 创建的临时对象
-                        _canvas.ItemsSource?.Remove(_newItem);
-                        // 清理状态
+                        // 视为无效绘制
+                        _canvas.ActiveROI.Regions.Remove(_newItem); // 注意是从 ActiveROI 移除
                         _canvas.SelectROIRegion(null);
                         _newItem = null;
                         _canvas.ReleaseMouseCapture();
-                        return; // 直接返回，不执行后面的选中或提交逻辑
+                        return;
                     }
 
 

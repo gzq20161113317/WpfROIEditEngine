@@ -87,15 +87,41 @@ namespace RoiEditor.Core.Interaction
 
                     if (_dragMode == DragType.Body)
                     {
-                        MoveSelectedRegions(delta);
+                        // === 多选移动约束逻辑 ===
+                        // 1. 计算所有选中物体的总包围盒 (预测移动后的位置)
+                        Rect totalBounds = Rect.Empty;
+                        foreach (var r in _canvas.SelectedRegions)
+                            totalBounds.Union(GetBoundingRect(r.Points));
+
+                        if (!totalBounds.IsEmpty)
+                        {
+                            Rect newBounds = new Rect(totalBounds.X + delta.X, totalBounds.Y + delta.Y, totalBounds.Width, totalBounds.Height);
+
+                            // 2. 算出被钳制后的新包围盒
+                            Rect clampedBounds = _canvas.ClampRectToValidRegion(newBounds);
+
+                            // 3. 反推实际允许移动的 delta
+                            Vector realDelta = new Vector(clampedBounds.X - totalBounds.X, clampedBounds.Y - totalBounds.Y);
+
+                            // 4. 应用修正后的 delta
+                            MoveSelectedRegions(realDelta);
+
+                            // 注意：这里更新 _lastMouseWorld 需要小心，为了平滑体验，
+                            // 我们通常更新为 "加上了 realDelta 的旧位置"，而不是鼠标的真实位置
+                            // 或者简单点，直接让 _lastMouseWorld = wPos，但在边界会有“滑手”的感觉
+                            // 工业软件通常的做法：
+                            _lastMouseWorld += realDelta;
+                        }
                     }
                     else
                     {
-                        ResizeROIRegion(_canvas.SelectedROIRegion, _dragMode, wPos);
+                        // === 拉伸约束逻辑 ===
+                        // 拉伸时，直接限制鼠标位置即可
+                        Point clampedPos = _canvas.ClampToValidRegion(wPos);
+                        ResizeROIRegion(_canvas.SelectedROIRegion, _dragMode, clampedPos);
+                        _lastMouseWorld = wPos; // 拉伸时可以直接更随鼠标
                     }
-
                     _canvas.RedrawEditorLayer();
-                    _lastMouseWorld = wPos;
                 }
             }
             else
@@ -283,17 +309,53 @@ namespace RoiEditor.Core.Interaction
             double newRight = oldBounds.Right;
             double newBottom = oldBounds.Bottom;
 
+            // 定义一个最小尺寸，防止缩成 0 或者翻转
+            // 0.1 个单位通常足够小了，既看不出缝隙，又能保证数学计算不报错
+            double minSize = 5;
+
             switch (handle)
             {
-                case DragType.TopLeft: newLeft = currentWorldPos.X; newTop = currentWorldPos.Y; break;
-                case DragType.Top: newTop = currentWorldPos.Y; break;
-                case DragType.TopRight: newRight = currentWorldPos.X; newTop = currentWorldPos.Y; break;
-                case DragType.Right: newRight = currentWorldPos.X; break;
-                case DragType.BottomRight: newRight = currentWorldPos.X; newBottom = currentWorldPos.Y; break;
-                case DragType.Bottom: newBottom = currentWorldPos.Y; break;
-                case DragType.BottomLeft: newLeft = currentWorldPos.X; newBottom = currentWorldPos.Y; break;
-                case DragType.Left: newLeft = currentWorldPos.X; break;
+                case DragType.TopLeft:
+                    // 限制：Left 不能超过 Right，Top 不能超过 Bottom
+                    newLeft = Math.Min(currentWorldPos.X, oldBounds.Right - minSize);
+                    newTop = Math.Min(currentWorldPos.Y, oldBounds.Bottom - minSize);
+                    break;
+
+                case DragType.Top:
+                    newTop = Math.Min(currentWorldPos.Y, oldBounds.Bottom - minSize);
+                    break;
+
+                case DragType.TopRight:
+                    // 限制：Right 不能小于 Left
+                    newRight = Math.Max(currentWorldPos.X, oldBounds.Left + minSize);
+                    newTop = Math.Min(currentWorldPos.Y, oldBounds.Bottom - minSize);
+                    break;
+
+                case DragType.Right:
+                    newRight = Math.Max(currentWorldPos.X, oldBounds.Left + minSize);
+                    break;
+
+                case DragType.BottomRight:
+                    newRight = Math.Max(currentWorldPos.X, oldBounds.Left + minSize);
+                    // 限制：Bottom 不能小于 Top
+                    newBottom = Math.Max(currentWorldPos.Y, oldBounds.Top + minSize);
+                    break;
+
+                case DragType.Bottom:
+                    newBottom = Math.Max(currentWorldPos.Y, oldBounds.Top + minSize);
+                    break;
+
+                case DragType.BottomLeft:
+                    newLeft = Math.Min(currentWorldPos.X, oldBounds.Right - minSize);
+                    newBottom = Math.Max(currentWorldPos.Y, oldBounds.Top + minSize);
+                    break;
+
+                case DragType.Left:
+                    newLeft = Math.Min(currentWorldPos.X, oldBounds.Right - minSize);
+                    break;
             }
+
+            // 这样算出来的 Width 和 Height 永远是正数 (>= minSize)
             return new Rect(newLeft, newTop, newRight - newLeft, newBottom - newTop);
         }
 

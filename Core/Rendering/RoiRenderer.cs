@@ -15,8 +15,8 @@ namespace RoiEditor.Core.Rendering
     public class RoiRenderer
     {
         // 样式常量 (以后改样式只改这里)
-        private const double BASE_THICKNESS = 2.0;
-        private const double HOVER_THICKNESS = 3.0;
+        private const double BASE_THICKNESS = 1.0;
+        private const double HOVER_THICKNESS = 2.0;
         private const double FILL_OPACITY = 0.2;
 
         //手柄样式(Screen Space)
@@ -111,7 +111,7 @@ namespace RoiEditor.Core.Rendering
                 var fill = new SolidColorBrush(region.Color) { Opacity = 0.25 };
                 var pen = new Pen(Brushes.Cyan, 1.0)
                 {
-                    DashStyle = new DashStyle(new double[] { 4, 4 }, 0)
+                    DashStyle = new DashStyle(new double[] { 2, 2 }, 0)
                 };
 
                 if (fill.CanFreeze) fill.Freeze();
