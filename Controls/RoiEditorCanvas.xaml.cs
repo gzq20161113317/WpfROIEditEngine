@@ -227,13 +227,38 @@ namespace RoiEditor.Controls
         private static void OnItemsSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var c = (RoiEditorCanvas)d;
-            
-            if (e.OldValue is INotifyCollectionChanged oldColl)
-                oldColl.CollectionChanged -= c.OnCollectionChanged;
 
-            if (e.NewValue is INotifyCollectionChanged newColl)
-                newColl.CollectionChanged += c.OnCollectionChanged;
+            // 1. 清理旧列表
+            if (e.OldValue is System.Collections.IEnumerable oldList)
+            {
+                if (oldList is INotifyCollectionChanged oldColl)
+                    oldColl.CollectionChanged -= c.OnCollectionChanged;
 
+                // 退订旧 Item 的事件
+                foreach (object item in oldList)
+                {
+                    if (item is ROIRegion region)
+                        region.PropertyChanged -= c.OnItemPropertyChanged;
+                }
+            }
+
+            // 2. 绑定新列表
+            if (e.NewValue is System.Collections.IEnumerable newList)
+            {
+                if (newList is INotifyCollectionChanged newColl)
+                    newColl.CollectionChanged += c.OnCollectionChanged;
+
+                // 【核心修复】这里是重点！
+                // 必须遍历当前列表里“已经存在”的所有 Item，给它们一个个订阅上！
+                // 之前你的代码漏了这一步，所以初始加载的 ROI 全都没反应。
+                foreach (object item in newList)
+                {
+                    if (item is ROIRegion region)
+                        region.PropertyChanged += c.OnItemPropertyChanged;
+                }
+            }
+
+            // 3. 立即重绘
             c.RebuildSpatialIndex();
             c.RenderStaticLayer();
             c.RenderEditorLayer();
