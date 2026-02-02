@@ -84,10 +84,14 @@ namespace RoiEditor.ViewModels.Component.Setting
             foreach (var region in selectedRegions)
             {
                 if (region.Points == null) continue;
-                for (int i = 0; i < region.Points.Count; i++)
+                var newPoints = new List<Point>(region.Points.Count);
+                foreach (var p in region.Points)
                 {
-                    region.Points[i] += offset;
+                    newPoints.Add(p + offset);
                 }
+
+                // 赋值回去，ROIRegion.Points 的 Setter 会被调用 -> 触发 Canvas 重绘
+                region.Points = newPoints;
             }
         }
 
@@ -111,53 +115,58 @@ namespace RoiEditor.ViewModels.Component.Setting
         {
             if (region.Points == null || region.Points.Count == 0) return;
 
-            //TODO:这里采用最简单的做法（仅适用于简单凸多边形），后续需要引入Clipper库
-            
-            //1.计算中心
-            double cx = 0,cy = 0;
-            foreach (var p in region.Points) { cx += p.X; cy += p.Y; }
-            Point center = new Point(cx / region.Points.Count, cy / region.Points.Count);
+            // 临时存储新点
+            List<Point> newPoints = null;
 
-            // 2. 针对矩形做特殊优化 (精准扩边)
+            //TODO:需要引入Clipper做复杂的计算才能够使用这个功能，此处仅演示作用
+            // 1. 矩形特殊处理
             if (region.Type == ROIRegionType.Rectangle && region.Points.Count == 4)
             {
-                // 重新计算包围盒并扩大
-                // 注意：这里假设点序是 TL, TR, BR, BL 或类似
-                // 简单起见，我们算出 Bounds，扩大 Bounds，再写回 Points
-                // 但这样会丢失旋转信息(如果有)。目前编辑器只支持正交矩形，所以安全。
-                Rect bounds = new Rect(region.Points[0], region.Points[2]); // 假设是对角
-                // 更严谨的 Bounds 计算
                 double minX = region.Points.Min(p => p.X);
                 double minY = region.Points.Min(p => p.Y);
                 double maxX = region.Points.Max(p => p.X);
                 double maxY = region.Points.Max(p => p.Y);
 
-                // 向外扩大 amount
                 minX -= amount; minY -= amount;
                 maxX += amount; maxY += amount;
 
-                // 检查是否缩没了
                 if (maxX <= minX || maxY <= minY) return;
 
-                // 重建点 (保持顺序: TL, TR, BR, BL)
-                region.Points[0] = new Point(minX, minY);
-                region.Points[1] = new Point(maxX, minY);
-                region.Points[2] = new Point(maxX, maxY);
-                region.Points[3] = new Point(minX, maxY);
+                newPoints = new List<Point>
+                {
+                    new Point(minX, minY),
+                    new Point(maxX, minY),
+                    new Point(maxX, maxY),
+                    new Point(minX, maxY)
+                };
             }
             else
             {
-                // 其他形状：简单粗暴的中心放射移动 (不完美，但能用)
-                for (int i = 0; i < region.Points.Count; i++)
+                // 2. 其他形状 (简单中心膨胀)
+                double cx = 0, cy = 0;
+                foreach (var p in region.Points) { cx += p.X; cy += p.Y; }
+                Point center = new Point(cx / region.Points.Count, cy / region.Points.Count);
+
+                newPoints = new List<Point>(region.Points.Count);
+                foreach (var p in region.Points)
                 {
-                    Vector dir = region.Points[i] - center;
-                    // 归一化方向
+                    Vector dir = p - center;
                     if (dir.Length > 0.001)
                     {
                         dir.Normalize();
-                        region.Points[i] += dir * amount;
+                        newPoints.Add(p + dir * amount);
+                    }
+                    else
+                    {
+                        newPoints.Add(p);
                     }
                 }
+            }
+
+            // 赋值回去，触发通知
+            if (newPoints != null)
+            {
+                region.Points = newPoints;
             }
         }
     }
