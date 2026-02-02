@@ -3,6 +3,7 @@ using RoiEditor.Enums;
 using RoiEditor.Events;
 using RoiEditor.Models;
 using RoiEditor.ViewModels.Component;
+using RoiEditor.ViewModels.Component.Setting;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
@@ -24,6 +25,7 @@ namespace RoiEditor.ViewModels
         public ToolBarViewModel ToolBar { get; set; }
         public CanvasViewModel Canvas { get; set; }
         public ROIListViewModel ROIListVM { get; set; }
+        public SettingViewModel SettingVM { get; set; }
 
         //扁平化数据
         public BindableCollection<ROIRegion> FlatRegions { get; } = new BindableCollection<ROIRegion>();
@@ -38,12 +40,14 @@ namespace RoiEditor.ViewModels
             //初始化所有子组件
             ToolBar = new ToolBarViewModel(eventAggregator);
             ROIListVM = new ROIListViewModel(eventAggregator,windowManager);
+            SettingVM = new SettingViewModel(eventAggregator);
             Canvas = new CanvasViewModel(eventAggregator);
 
             Canvas.FlatROIRegions = FlatRegions;
 
             Items.Add(ToolBar);
             Items.Add(ROIListVM);
+            Items.Add(SettingVM);
             Items.Add(Canvas);
 
             //核心逻辑：数据同步

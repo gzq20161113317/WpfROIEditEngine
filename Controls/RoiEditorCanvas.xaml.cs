@@ -297,10 +297,39 @@ namespace RoiEditor.Controls
                 }
             }
 
+            // 监听 Item 属性变更
+            if (e.NewItems != null)
+            {
+                foreach (ROIRegion item in e.NewItems)
+                    item.PropertyChanged += OnItemPropertyChanged;
+            }
+            if (e.OldItems != null)
+            {
+                foreach (ROIRegion item in e.OldItems)
+                    item.PropertyChanged -= OnItemPropertyChanged;
+            }
+
             // 3. 常规重建索引和重绘
             RebuildSpatialIndex();
             RenderStaticLayer();
             RenderEditorLayer(); // 这次重绘时，幽灵已经不在 SelectedRegions 里了，所以会消失
+        }
+
+        private void OnItemPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            // 如果是点变了（比如 Setting 里的 Move/Inflate），需要重画 + 重建索引
+            if (e.PropertyName == "Points")
+            {
+                RebuildSpatialIndex();
+                RenderStaticLayer();
+                RenderEditorLayer();
+            }
+            // 如果是样式变了 (线宽, 颜色)，只需要重画
+            else if (e.PropertyName == "LineWidth" || e.PropertyName == "Color")
+            {
+                RenderStaticLayer();
+                RenderEditorLayer();
+            }
         }
 
         private static void OnSelectedROIRegionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -1305,6 +1334,13 @@ namespace RoiEditor.Controls
 
             // 8) EventAggregator 退订，防止控件被外部引用住
             try { EventAggregator?.Unsubscribe(this); } catch { }
+
+            // 9) 退订所有 Item 事件
+            if (ItemsSource != null)
+            {
+                foreach (var item in ItemsSource)
+                    item.PropertyChanged -= OnItemPropertyChanged;
+            }
         }
 
     }

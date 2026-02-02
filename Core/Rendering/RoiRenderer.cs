@@ -15,10 +15,8 @@ namespace RoiEditor.Core.Rendering
     public class RoiRenderer
     {
         // 样式常量 (以后改样式只改这里)
-        private const double BASE_THICKNESS = 1.0;
-        private const double HOVER_THICKNESS = 2.0;
+        private const double HOVER_THICKNESS_ADD = 1.0;
         private const double FILL_OPACITY = 0.2;
-
         //手柄样式(Screen Space)
         public const double HANDLE_SIZE = 6.0;//手柄大小6x6像素
         private const double MIN_ROI_SIZE_FOR_HANDLE = 15.0;//最小显示阈值
@@ -40,12 +38,7 @@ namespace RoiEditor.Core.Rendering
             if (items == null) return;
 
             // 根据缩放比动态计算线宽，保证视觉粗细一致
-            double zoom = currentZoom <= 0 ? 1 : currentZoom;
-            double thickness = BASE_THICKNESS / zoom;
-            double hoverThick = HOVER_THICKNESS / zoom;
-
-            // 预冻结画笔，提升性能
-            // (注意：为了极致性能，真实项目中可以将常用颜色的 Pen 缓存起来，而不是每次 new)
+            double zoom = currentZoom <= 1e-6 ? 1 : currentZoom;
 
             foreach (var item in items)
             {
@@ -54,9 +47,11 @@ namespace RoiEditor.Core.Rendering
 
                 var geom = BuildGeometry(item);
 
+                double baseThickness = item.LineWidth / zoom;
+
                 // 1. 准备画笔和填充
                 var brush = new SolidColorBrush(item.Color) { Opacity = FILL_OPACITY };
-                var pen = new Pen(new SolidColorBrush(item.Color), thickness);
+                var pen = new Pen(new SolidColorBrush(item.Color), baseThickness);
 
                 // 冻结对象 (WPF 性能关键)
                 if (brush.CanFreeze) brush.Freeze();
@@ -69,6 +64,7 @@ namespace RoiEditor.Core.Rendering
                 // 3. 绘制 Hover 高亮状态 (叠加一层)
                 if (ReferenceEquals(item, hoverItem))
                 {
+                    double hoverThick = (item.LineWidth + HOVER_THICKNESS_ADD) / zoom;
                     var hoverPen = new Pen(new SolidColorBrush(item.Color), hoverThick)
                     {
                         // 圆头让高亮更好看
@@ -106,9 +102,9 @@ namespace RoiEditor.Core.Rendering
                 var transform = new MatrixTransform(matrix);
                 var screenGeom = worldGeom.GetFlattenedPathGeometry(); // 稍微平滑一下
                 screenGeom.Transform = transform; // 应用变换
-
                 // 4. 绘制选中框 (样式：半透明底 + 青色虚线边)
-                var fill = new SolidColorBrush(region.Color) { Opacity = 0.25 };
+                var fill = new SolidColorBrush(region.Color) { Opacity = 0.5 };
+                
                 var pen = new Pen(Brushes.Cyan, 1.0)
                 {
                     DashStyle = new DashStyle(new double[] { 2, 2 }, 0)

@@ -19,6 +19,7 @@ namespace RoiEditor.Models
         private Color _color = Colors.Yellow;
         private bool _isSelected;
         private bool _isEditing;
+        private double _lineWidth = 1.0;//默认1px
 
         public ROI Parent { get; set; }
 
@@ -79,6 +80,15 @@ namespace RoiEditor.Models
                 return new Point(x / Points.Count, y / Points.Count);
             }
         }
+
+        //线宽属性
+        public double LineWidth
+        {
+            get => _lineWidth;
+            set { _lineWidth = value; NotifyOfPropertyChange(() => LineWidth);  }
+        }
+
+
 
         public ROIRegion()
         {

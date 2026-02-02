@@ -98,6 +98,8 @@
     <Compile Include="ViewModels\Component\CanvasViewModel.cs" />
     <Compile Include="ViewModels\Component\RelayCommand.cs" />
     <Compile Include="ViewModels\Component\ROIListViewModel.cs" />
+    <Compile Include="ViewModels\Component\Setting\SelectSettingViewModel.cs" />
+    <Compile Include="ViewModels\Component\Setting\SettingViewModel.cs" />
     <Compile Include="ViewModels\Component\ToolBarViewModel.cs" />
     <Compile Include="ViewModels\Component\ToolItemViewModel.cs" />
     <Compile Include="ViewModels\RoiMainViewModel.cs" />
@@ -109,6 +111,12 @@
     </Compile>
     <Compile Include="Views\Component\ROIListView.xaml.cs">
       <DependentUpon>ROIListView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\Component\Setting\SelectSettingView.xaml.cs">
+      <DependentUpon>SelectSettingView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\Component\Setting\SettingView.xaml.cs">
+      <DependentUpon>SettingView.xaml</DependentUpon>
     </Compile>
     <Compile Include="Views\Component\ToolBarView.xaml.cs">
       <DependentUpon>ToolBarView.xaml</DependentUpon>
@@ -139,6 +147,14 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Views\Component\ROIListView.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\Component\Setting\SelectSettingView.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\Component\Setting\SettingView.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

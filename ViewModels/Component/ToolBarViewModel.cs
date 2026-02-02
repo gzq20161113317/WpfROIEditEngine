@@ -264,7 +264,11 @@ namespace RoiEditor.ViewModels.Component
                 || mode == ROIOperationMode.ROI_OS_ROI_Pen
                 || mode == ROIOperationMode.ROI_OS_AutoRegion
                 || mode == ROIOperationMode.ROI_OS_FindRegion
-                || mode == ROIOperationMode.ROI_OS_Delete_Range;
+                || mode == ROIOperationMode.ROI_OS_Delete_Range
+                || mode == ROIOperationMode.ROI_OS_Select
+                || mode == ROIOperationMode.ROI_OS_MoveDrag
+                || mode == ROIOperationMode.ROI_OS_MoveShape
+                || mode == ROIOperationMode.ROI_OS_MultiMove;
         }
 
         #endregion

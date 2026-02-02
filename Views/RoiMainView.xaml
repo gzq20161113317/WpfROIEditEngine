@@ -35,7 +35,7 @@
         <!-- ===================== Right Column ===================== -->
         <Grid Grid.Column="1">
             <Grid.RowDefinitions>
-                <RowDefinition Height="5*"/>
+                <RowDefinition Height="4*"/>
                 <!-- RoiList -->
                 <RowDefinition Height="5*"/>
                 <!-- Details / Parameters -->
@@ -45,35 +45,7 @@
             <ContentControl x:Name="ROIListVM" />
 
             <!-- Details / Parameters (Row 1) -->
-            <Border Grid.Row="1"
-                    Background="#252526"
-                    BorderBrush="#444"
-                    BorderThickness="1,0,0,0"
-                    Padding="8">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-
-                    <TextBlock Text="DETAILS / PARAMETERS" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,6"/>
-
-                    <!-- 先放一个占位：后续你可以换成 TabControl / PropertyGrid / 参数表单等 -->
-                    <Border Grid.Row="1"
-                            Background="#1E1E1E"
-                            BorderBrush="#3F3F46"
-                            BorderThickness="1"
-                            CornerRadius="4"
-                            Padding="10">
-                        <StackPanel>
-                            <TextBlock Text="{Binding SelectedROIRegion.Name, StringFormat='Selected: {0}'}"
-                                       Foreground="White" FontSize="12" Margin="0,0,0,6"/>
-                            <TextBlock Text="（这里后续放 ROI/Region 参数、测量结果、属性编辑等）"
-                                       Foreground="Gray" FontSize="12" TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Border>
-                </Grid>
-            </Border>
+            <ContentControl x:Name="SettingVM" Grid.Row="1"/>
         </Grid>
     </Grid>
 </UserControl>
