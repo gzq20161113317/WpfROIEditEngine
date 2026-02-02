@@ -53,6 +53,17 @@ namespace RoiEditor.ViewModels
             //核心逻辑：数据同步
             //当用户再ROIListVM里增加/删除"墙"时，MainVM负责把"砖"搬运到FlatRegions
             ROIListVM.ROIS.CollectionChanged += OnROIListChanged;
+
+            if (ROIListVM.ROIS.Count > 0)
+            {
+                foreach (var roi in ROIListVM.ROIS)
+                {
+                    // 同步现有数据
+                    FlatRegions.AddRange(roi.Regions);
+                    // 挂载监听器
+                    roi.Regions.CollectionChanged += (s, args) => SyncRegions(args);
+                }
+            }
         }
 
 
@@ -79,6 +90,7 @@ namespace RoiEditor.ViewModels
                 foreach(ROI oldRoi in e.OldItems)
                 {
                     FlatRegions.RemoveRange(oldRoi.Regions);
+                    oldRoi.Regions.CollectionChanged -= (s, args) => SyncRegions(args);
                 }
             }
         }

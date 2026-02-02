@@ -92,6 +92,15 @@ namespace RoiEditor.ViewModels.Component
                 if (ReferenceEquals(_selectedROIRegion, value)) return;
                 _selectedROIRegion = value;
                 NotifyOfPropertyChange(() => SelectedROIRegion);
+                // 当用户在画布上点击 Region 时，必须告诉全系统：现在的 ActiveROI 是这个 Region 的爹！
+                if (_selectedROIRegion != null && _selectedROIRegion.Parent != null)
+                {
+                    // 1. 更新自身的 ActiveROI
+                    ActiveROI = _selectedROIRegion.Parent;
+
+                    // 2. 发送事件，确保 SelectSettingViewModel 能收到并更新 _currentActiveROI
+                    _eventAggregator.PublishOnUIThread(new ActiveROIChangedEvent(_selectedROIRegion.Parent));
+                }
             }
         }
 

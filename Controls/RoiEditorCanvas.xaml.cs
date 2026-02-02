@@ -248,7 +248,6 @@ namespace RoiEditor.Controls
                 if (newList is INotifyCollectionChanged newColl)
                     newColl.CollectionChanged += c.OnCollectionChanged;
 
-                // 【核心修复】这里是重点！
                 // 必须遍历当前列表里“已经存在”的所有 Item，给它们一个个订阅上！
                 // 之前你的代码漏了这一步，所以初始加载的 ROI 全都没反应。
                 foreach (object item in newList)
