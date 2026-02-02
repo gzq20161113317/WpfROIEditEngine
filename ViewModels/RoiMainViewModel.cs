@@ -61,7 +61,7 @@ namespace RoiEditor.ViewModels
                     // 同步现有数据
                     FlatRegions.AddRange(roi.Regions);
                     // 挂载监听器
-                    roi.Regions.CollectionChanged += (s, args) => SyncRegions(args);
+                    roi.Regions.CollectionChanged += OnRegionsCollectionChanged;
                 }
             }
         }
@@ -82,7 +82,7 @@ namespace RoiEditor.ViewModels
                 {
                     FlatRegions.AddRange(newROI.Regions);
                     // 监听这面墙后续的砖块增减
-                    newROI.Regions.CollectionChanged += (s, args) => SyncRegions(args);
+                    newROI.Regions.CollectionChanged += OnRegionsCollectionChanged;
                 }
             }
             if(e.OldItems != null)
@@ -90,9 +90,14 @@ namespace RoiEditor.ViewModels
                 foreach(ROI oldRoi in e.OldItems)
                 {
                     FlatRegions.RemoveRange(oldRoi.Regions);
-                    oldRoi.Regions.CollectionChanged -= (s, args) => SyncRegions(args);
+                    oldRoi.Regions.CollectionChanged -= OnRegionsCollectionChanged;
                 }
             }
+        }
+
+        private void OnRegionsCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            SyncRegions(e);
         }
 
         /// <summary>
@@ -121,6 +126,21 @@ namespace RoiEditor.ViewModels
 
         protected override void OnDeactivate(bool close)
         {
+            if (close)
+            {
+                // A. 退订 ROI 列表的主监听
+                if (ROIListVM != null && ROIListVM.ROIS != null)
+                {
+                    ROIListVM.ROIS.CollectionChanged -= OnROIListChanged;
+
+                    // B. 遍历现有 ROI，退订每一个 Region 的监听
+                    foreach (var roi in ROIListVM.ROIS)
+                    {
+                        // 使用我们之前提取的具名方法进行解订阅
+                        roi.Regions.CollectionChanged -= OnRegionsCollectionChanged;
+                    }
+                }
+            }
             base.OnDeactivate(close);
             _eventAggregator.Unsubscribe(this);
         }

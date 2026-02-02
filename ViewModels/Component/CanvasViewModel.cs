@@ -4,6 +4,7 @@ using RoiEditor.Events;
 using RoiEditor.Models;
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -42,7 +43,7 @@ namespace RoiEditor.ViewModels.Component
         {
             _eventAggregator = eventAggregator;
             // 监听总列表增删
-            FlatROIRegions.CollectionChanged += (s, e) => UpdateAllStatistics();
+            FlatROIRegions.CollectionChanged += OnFlatRegionsChanged;
         }
 
         public string MapPath
@@ -180,6 +181,11 @@ namespace RoiEditor.ViewModels.Component
                 UpdateAllStatistics();
             }
         }
+        private void OnFlatRegionsChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            UpdateAllStatistics();
+        }
+
 
         // ==========================================
         // 【核心】统计算法
@@ -246,14 +252,16 @@ namespace RoiEditor.ViewModels.Component
 
         protected override void OnDeactivate(bool close)
         {
+            if (close)
+            {
+                FlatROIRegions.CollectionChanged -= OnFlatRegionsChanged;
+                foreach (var r in _multiSelectedRegions)
+                    r.PropertyChanged -= OnRegionPropertyChanged;
+                _multiSelectedRegions.Clear();
+                _multiSelectedRegions = null;
+            }
             base.OnDeactivate(close);
             _eventAggregator.Unsubscribe(this);
-            foreach (var r in _multiSelectedRegions)
-                r.PropertyChanged -= OnRegionPropertyChanged;
-            _multiSelectedRegions.Clear();
-            _multiSelectedRegions = null;
         }
-
-
     }
 }
