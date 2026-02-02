@@ -40,6 +40,7 @@ namespace RoiEditor.ViewModels.Component
         {
             _eventAggregator = eventAggregator;
             _flatROIRegions = new BindableCollection<ROIRegion>();
+            _flatROIRegions.CollectionChanged += OnFlatRegionsChanged;
         }
 
         public string MapPath
@@ -293,7 +294,7 @@ namespace RoiEditor.ViewModels.Component
         protected override void OnActivate()
         {
             // 监听总列表增删
-            FlatROIRegions.CollectionChanged += OnFlatRegionsChanged;
+            
             base.OnActivate();
             _eventAggregator.Subscribe(this);
         }
