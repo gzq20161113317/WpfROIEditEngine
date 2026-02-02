@@ -43,7 +43,7 @@ namespace RoiEditor.Controls
         // Dependency Properties
         // =========================
         public static readonly DependencyProperty ItemsSourceProperty = DependencyProperty.Register(
-            nameof(ItemsSource), typeof(IObservableCollection<ROIRegion>), typeof(RoiEditorCanvas),
+            nameof(ItemsSource), typeof(IObservableCollection<ROI>), typeof(RoiEditorCanvas),
             new PropertyMetadata(null, OnItemsSourceChanged));
 
         public static readonly DependencyProperty ROIOperationModeProperty = DependencyProperty.Register(
@@ -139,9 +139,9 @@ namespace RoiEditor.Controls
             set => SetValue(CurrentLevelProperty, value);
         }
 
-        public IObservableCollection<ROIRegion> ItemsSource
+        public IObservableCollection<ROI> ItemsSource
         {
-            get => (IObservableCollection<ROIRegion>)GetValue(ItemsSourceProperty);
+            get => (IObservableCollection<ROI>)GetValue(ItemsSourceProperty);
             set => SetValue(ItemsSourceProperty, value);
         }
 
@@ -169,10 +169,35 @@ namespace RoiEditor.Controls
             set => SetValue(EventAggregatorProperty, value);
         }
 
-        
+
+
+
+        // =========================
+        // Internal Prop
+        // =========================
 
         //获取有效区 (代理 MapService)
         public Rect ValidRegion => _mapService.EffectiveRegion;
+
+        // 这是一个动态迭代器，把树状结构“拉平”给内部使用
+        // 这样 RebuildSpatialIndex, RenderStaticLayer 等方法里的 foreach 都不用改逻辑
+        private IEnumerable<ROIRegion> FlatRegions
+        {
+            get
+            {
+                if (ItemsSource == null) yield break;
+                foreach (var roi in ItemsSource)
+                {
+                    if (roi.Regions != null)
+                    {
+                        foreach (var region in roi.Regions)
+                        {
+                            yield return region;
+                        }
+                    }
+                }
+            }
+        }
 
         // =========================
         // Internal State
@@ -243,6 +268,8 @@ namespace RoiEditor.Controls
             InitializeTools();
         }
 
+
+
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
             // 如果之前被清理过，现在需要复活
@@ -312,13 +339,6 @@ namespace RoiEditor.Controls
             EditorLayer.Children.Add(_editorHost);
         }
 
-        // 3. 集合内容变化回调 (负责重绘)
-        // 注意：以前这里负责发 EventAggregator，现在删掉发事件代码，只保留重绘
-        private void OnSelectedRegionsCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
-        {
-            // 如果集合变了（比如 Tool 往里 Add 了一个 ROI），View 负责刷新画面
-            RenderEditorLayer();
-        }
 
         // =========================
         // DP callbacks
@@ -332,129 +352,116 @@ namespace RoiEditor.Controls
         {
             var c = (RoiEditorCanvas)d;
 
-            // 1. 清理旧列表
-            if (e.OldValue is System.Collections.IEnumerable oldList)
+            // 解绑旧数据
+            if (e.OldValue is ObservableCollection<ROI> oldList)
             {
-                if (oldList is INotifyCollectionChanged oldColl)
-                    oldColl.CollectionChanged -= c.OnCollectionChanged;
-
-                // 退订旧 Item 的事件
-                foreach (object item in oldList)
+                oldList.CollectionChanged -= c.OnRoiListChanged;
+                foreach (var roi in oldList)
                 {
-                    if (item is ROIRegion region)
-                        region.PropertyChanged -= c.OnItemPropertyChanged;
+                    roi.Regions.CollectionChanged -= c.OnSubRegionListChanged;
+                    foreach (var r in roi.Regions) r.PropertyChanged -= c.OnItemPropertyChanged;
                 }
             }
 
-            // 2. 绑定新列表
-            if (e.NewValue is System.Collections.IEnumerable newList)
+            // 绑定新数据
+            if (e.NewValue is ObservableCollection<ROI> newList)
             {
-                if (newList is INotifyCollectionChanged newColl)
-                    newColl.CollectionChanged += c.OnCollectionChanged;
-
-                // 必须遍历当前列表里“已经存在”的所有 Item，给它们一个个订阅上！
-                // 之前你的代码漏了这一步，所以初始加载的 ROI 全都没反应。
-                foreach (object item in newList)
+                newList.CollectionChanged += c.OnRoiListChanged;
+                foreach (var roi in newList)
                 {
-                    if (item is ROIRegion region)
-                        region.PropertyChanged += c.OnItemPropertyChanged;
+                    roi.Regions.CollectionChanged += c.OnSubRegionListChanged;
+                    foreach (var r in roi.Regions) r.PropertyChanged += c.OnItemPropertyChanged;
                 }
             }
 
-            // 3. 立即重绘
-            c.RebuildSpatialIndex();
-            c.RenderStaticLayer();
-            c.RenderEditorLayer();
+            c.RefreshAll();
         }
 
-        private void OnCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        /// <summary>
+        /// 第一层监听：ROI 增删
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void OnRoiListChanged(object sender, NotifyCollectionChangedEventArgs e)
         {
-            bool selectionChanged = false;
-
-            // 1. 检查是否有“已选中”的物体被移除了
-            if (e.Action == NotifyCollectionChangedAction.Remove ||
-                e.Action == NotifyCollectionChangedAction.Replace ||
-                e.Action == NotifyCollectionChangedAction.Reset)
+            //A.处理新增的ROI组
+            if(e.NewItems != null)
             {
-                if (e.OldItems != null)
+                foreach(ROI roi in e.NewItems)
                 {
-                    foreach (ROIRegion item in e.OldItems)
+                    //监听这个新组内部Region的增删
+                    roi.Regions.CollectionChanged += OnSubRegionListChanged;
+                    //监听这个新组内部Region的属性变化（Points）
+                    foreach (var r in roi.Regions) r.PropertyChanged += OnItemPropertyChanged;
+                }
+            }
+
+            //B.处理移除ROI组（需要清理选中状态！）
+            if(e.OldItems != null)
+            {
+                foreach(ROI roi in e.OldItems)
+                {
+                    roi.Regions.CollectionChanged -= OnSubRegionListChanged;
+                    foreach(var r in roi.Regions)
                     {
-                        if (SelectedRegions.Contains(item))
-                        {
-                            // 从选中列表中剔除
-                            item.IsSelected = false;
-                            item.IsEditing = false;
-                            SelectedRegions.Remove(item);
-                            selectionChanged = true;
-                        }
-                        item.PropertyChanged -= OnItemPropertyChanged;
+                        r.PropertyChanged -= OnItemPropertyChanged;
+                        // 如果被移除的组里包含已选中的 Region，要从 SelectedRegions 里踢出去
+                        RemoveFromSelectionIfContains(r);
                     }
                 }
+            }
 
-                // 特别注意：Reset 时 e.OldItems 通常为 null，但意味着整个列表被清空或重置
-                // 如果是 Reset，通常建议清空所有选中项
-                if (e.Action == NotifyCollectionChangedAction.Reset)
+            if(e.Action == NotifyCollectionChangedAction.Reset)
+            {
+                ClearSelection();//大重置时直接清空选中
+            }
+
+            //刷新画面
+            RefreshAll();
+        }
+
+        /// <summary>
+        /// 第二层监听：Region 增删
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void OnSubRegionListChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            //A.处理新增Region
+            if(e.NewItems != null)
+            {
+                foreach(ROIRegion r in e.NewItems)
                 {
-                    if (SelectedRegions.Count > 0)
-                    {
-                        foreach (var r in SelectedRegions) { r.IsSelected = false; r.IsEditing = false; }
-                        SelectedRegions.Clear();
-                        selectionChanged = true;
-                    }
+                    r.PropertyChanged += OnItemPropertyChanged;
+                }
+            }
+
+            //B.处理移除Region（清理选中状态）
+            if(e.OldItems != null)
+            {
+                foreach(ROIRegion r in e.OldItems)
+                {
+                    r.PropertyChanged -= OnItemPropertyChanged;
+                    RemoveFromSelectionIfContains(r);
                 }
             }
 
             if (e.Action == NotifyCollectionChangedAction.Reset)
             {
-                // ItemsSource 是当前最新的完整列表
-                if (ItemsSource != null)
-                {
-                    foreach (var item in ItemsSource)
-                    {
-                        // 先退订一次保平安（防止重复订阅），再订阅
-                        item.PropertyChanged -= OnItemPropertyChanged;
-                        item.PropertyChanged += OnItemPropertyChanged;
-                    }
-                }
-            }
-            // =========================================================
-
-            // 2. 处理常规新增 (Add)
-            if (e.NewItems != null)
-            {
-                foreach (ROIRegion item in e.NewItems)
-                    item.PropertyChanged += OnItemPropertyChanged;
+                // 简单处理：如果是子列表 Reset，虽然不一定全清空，但为了安全可以取消所有选中
+                // 或者你可以遍历 ItemsSource 重新核对，这里简化处理
+                ClearSelection();
             }
 
-            // 2. 如果选中项确实变少了，需要检查“主选中项(SelectedROIRegion)”是否也挂了
-            if (selectionChanged)
-            {
-                // 如果当前的主选中项已经不在 SelectedRegions 里了（说明刚被删了）
-                if (SelectedROIRegion != null && !SelectedRegions.Contains(SelectedROIRegion))
-                {
-                    // 将主权移交给列表里剩下的最后一个，或者置空
-                    var nextMain = SelectedRegions.LastOrDefault();
-
-                    // 【必须加锁】更新属性，防止触发回调死循环
-                    _isInternalUpdate = true;
-                    try
-                    {
-                        SetCurrentValue(SelectedROIRegionProperty, nextMain);
-                    }
-                    finally
-                    {
-                        _isInternalUpdate = false;
-                    }
-                }
-            }
-
-            // 3. 常规重建索引和重绘
-            RebuildSpatialIndex();
-            RenderStaticLayer();
-            RenderEditorLayer(); // 这次重绘时，幽灵已经不在 SelectedRegions 里了，所以会消失
+            // 刷新画面
+            RefreshAll();
         }
 
+        /// <summary>
+        /// 第三层：Region的属性变更
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void OnItemPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
             // 如果是点变了（比如 Setting 里的 Move/Inflate），需要重画 + 重建索引
@@ -469,6 +476,33 @@ namespace RoiEditor.Controls
             {
                 RenderStaticLayer();
                 RenderEditorLayer();
+            }
+        }
+
+        // 3. 集合内容变化回调 (负责重绘)
+        // 注意：以前这里负责发 EventAggregator，现在删掉发事件代码，只保留重绘
+        private void OnSelectedRegionsCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            // 如果集合变了（比如 Tool 往里 Add 了一个 ROI），View 负责刷新画面
+            RenderEditorLayer();
+        }
+
+        // 辅助方法：检查删除的项是否被选中
+        private void CheckSelectionOnRemove(NotifyCollectionChangedEventArgs e)
+        {
+            if (e.Action == NotifyCollectionChangedAction.Remove || e.Action == NotifyCollectionChangedAction.Reset)
+            {
+                if (e.OldItems != null && SelectedRegions != null)
+                {
+                    foreach (ROIRegion item in e.OldItems)
+                    {
+                        if (SelectedRegions.Contains(item))
+                        {
+                            item.IsSelected = false;
+                            SelectedRegions.Remove(item);
+                        }
+                    }
+                }
             }
         }
 
@@ -852,7 +886,7 @@ namespace RoiEditor.Controls
                 // 2. 绘制静态 ROI
                 if (ItemsSource != null)
                 {
-                    _renderer.DrawStaticLayer(dc, ItemsSource, _hoverROIRegion, MainMatrix.Matrix.M11);
+                    _renderer.DrawStaticLayer(dc, FlatRegions, _hoverROIRegion, MainMatrix.Matrix.M11);
                 }
             }
 
@@ -1093,7 +1127,7 @@ namespace RoiEditor.Controls
 
         internal void RebuildSpatialIndex()
         {
-            if (ItemsSource == null || ItemsSource.Count == 0)
+            if (FlatRegions == null || FlatRegions.Count() == 0)
             {
                 _spatialIndex = null;
                 return;
@@ -1115,7 +1149,7 @@ namespace RoiEditor.Controls
                 maxObjects: 20,
                 maxLevels: 8);
 
-            foreach (var item in ItemsSource)
+            foreach (var item in FlatRegions)
             {
                 if (item?.Points != null && item.Points.Count >= 3)
                     _spatialIndex.Insert(item);
@@ -1123,60 +1157,83 @@ namespace RoiEditor.Controls
         }
 
         /// <summary>
-        /// 命中测试
+        /// 命中测试 (已适配层级结构)
         /// </summary>
-        /// <param name="wPos">世界坐标</param>
-        /// <param name="filter">可选过滤器，用于排除不想命中的物体（如被 ActiveROI 过滤）</param>
         internal ROIRegion HitTestROIRegion(Point wPos, Predicate<ROIRegion> filter = null)
         {
+            // 如果没有空间索引，走暴力遍历
             if (_spatialIndex == null)
-                return HitTestROIRegionLegacy(wPos, filter); // 传给 Legacy
+                return HitTestROIRegionLegacy(wPos, filter);
 
+            // 1. 先用四叉树粗筛
             _hitTestCache.Clear();
             _spatialIndex.Query(wPos, _hitTestCache);
             if (_hitTestCache.Count == 0) return null;
 
-            ROIRegion bestHit = null;
-            int bestIndex = -1;
+            // 为了快速判断一个 Region 是否在粗筛结果里，转成 HashSet
+            var candidates = new HashSet<ROIRegion>(_hitTestCache);
 
-            foreach (var item in _hitTestCache)
+            // 2. 双层倒序遍历 (Z-Order: 后画的先命中)
+            // 遍历 ROI 组 (倒序)
+            if (ItemsSource != null)
             {
-                // 【过滤器检查】
-                if (filter != null && !filter(item)) continue;
-
-                if (IsPointInROIRegion(item, wPos))
+                for (int i = ItemsSource.Count - 1; i >= 0; i--)
                 {
-                    int index = ItemsSource.IndexOf(item);
-                    if (index > bestIndex)
+                    var roi = ItemsSource[i];
+                    if (roi.Regions == null) continue;
+
+                    // 遍历组内 Region (倒序)
+                    for (int j = roi.Regions.Count - 1; j >= 0; j--)
                     {
-                        bestIndex = index;
-                        bestHit = item;
+                        var region = roi.Regions[j];
+
+                        // 只有在粗筛结果里的才进行精确计算
+                        if (candidates.Contains(region))
+                        {
+                            // 过滤器检查
+                            if (filter != null && !filter(region)) continue;
+
+                            // 精确几何检查
+                            if (IsPointInROIRegion(region, wPos))
+                            {
+                                return region; // 找到的最上层物体，直接返回
+                            }
+                        }
                     }
                 }
             }
 
-            return bestHit;
+            return null;
         }
 
+        /// <summary>
+        /// 暴力命中测试 (已适配层级结构)
+        /// </summary>
         private ROIRegion HitTestROIRegionLegacy(Point wPos, Predicate<ROIRegion> filter)
         {
             if (ItemsSource == null) return null;
 
+            // 双层倒序遍历
             for (int i = ItemsSource.Count - 1; i >= 0; i--)
             {
                 var roi = ItemsSource[i];
-                if (roi?.Points == null || roi.Points.Count < 3) continue;
+                if (roi.Regions == null) continue;
 
-                // 【过滤器检查】
-                if (filter != null && !filter(roi)) continue;
+                for (int j = roi.Regions.Count - 1; j >= 0; j--)
+                {
+                    var region = roi.Regions[j];
+                    if (region?.Points == null || region.Points.Count < 3) continue;
 
-                var geom = RoiRenderer.BuildGeometry(roi);
-                if (!geom.Bounds.Contains(wPos)) continue;
+                    if (filter != null && !filter(region)) continue;
 
-                if (geom.FillContains(wPos)) return roi;
+                    // 几何检查
+                    var geom = RoiRenderer.BuildGeometry(region);
+                    if (geom.FillContains(wPos)) return region;
 
-                var pen = new Pen(Brushes.Transparent, 6.0 / Math.Max(1e-6, MainMatrix.Matrix.M11));
-                if (geom.StrokeContains(pen, wPos)) return roi;
+                    double zoom = Math.Max(1e-6, MainMatrix.Matrix.M11);
+                    var pen = new Pen(Brushes.Transparent, 6.0 / zoom);
+                    if (geom.StrokeContains(pen, wPos)) return region;
+                }
             }
 
             return null;
@@ -1253,6 +1310,35 @@ namespace RoiEditor.Controls
         }
 
         #endregion
+
+
+        private void RemoveFromSelectionIfContains(ROIRegion item)
+        {
+            if (SelectedRegions != null && SelectedRegions.Contains(item))
+            {
+                item.IsSelected = false;
+                item.IsEditing = false;
+                SelectedRegions.Remove(item);
+
+                // 如果正好删掉的是当前的主选中项 (SelectedROIRegion)，要处理一下
+                if (SelectedROIRegion == item)
+                {
+                    var nextMain = SelectedRegions.LastOrDefault();
+                    // 避免递归调用
+                    using (PreventRecursiveSelection())
+                    {
+                        SetCurrentValue(SelectedROIRegionProperty, nextMain);
+                    }
+                }
+            }
+        }
+
+        private void RefreshAll()
+        {
+            RebuildSpatialIndex();
+            RenderStaticLayer();
+            RenderEditorLayer();
+        }
 
         private bool IsPointInROIRegion(ROIRegion roi, Point p)
         {

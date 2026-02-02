@@ -35,19 +35,14 @@ namespace RoiEditor.ViewModels.Component
         private string _totalAreaInfo;
         private string _activeROIAreaInfo;
         private string _selectedAreaInfo;
+        private ObservableCollection<ROI> _roiCollection;
 
-        // 全局 ROI 列表 (来自 RoiMainViewModel)
-        private BindableCollection<ROIRegion> _flatROIRegions;
         #endregion
 
         #region Properties
 
         public IEventAggregator EventAggregator => _eventAggregator;
         public string LevelStatusString => $"Layer: {CurrentLevel} / {MaxLevel}";
-
-        // 【核心】当前选中的 ROI 列表 (Source of Truth)
-        // 这个集合会双向绑定到 View 的 SelectedRegions
-        public ObservableCollection<ROIRegion> MySelection { get; } = new ObservableCollection<ROIRegion>();
 
         public string MapPath
         {
@@ -89,6 +84,55 @@ namespace RoiEditor.ViewModels.Component
             }
         }
 
+        // 1. 数据源（仓库）：树状结构，包含所有 ROI
+        public ObservableCollection<ROI> ROICollection
+        {
+            get => _roiCollection;
+            set
+            {
+                if (_roiCollection == value) return;
+                
+                //一般不会变更ROI列表
+                //A.旧列表彻底解绑
+                if(_roiCollection != null)
+                {
+                    _roiCollection.CollectionChanged -= OnROICollectionChanged;//解绑旧ROI集合的CollectionChanged事件(ROI的增删的时候会触发)
+                    foreach (var roi in _roiCollection)
+                    {
+                        roi.Regions.CollectionChanged -= OnSubRegionsChanged;//解绑旧ROI集合的每一个ROI的Regions的CollectionChanged事件
+                        foreach (var r in roi.Regions)
+                        {
+                            r.PropertyChanged -= OnRegionPropertyChanged;//解绑旧ROI集合的每一个ROI的Regions的每一个Region的PropertyChanged事件
+                        }
+                    }
+                }
+
+                _roiCollection = value;
+
+                //B.新列表绑定
+                if(_roiCollection != null)
+                {
+                    _roiCollection.CollectionChanged += OnROICollectionChanged;//绑定新ROI集合的CollectionChanged事件(ROI的增删的时候会触发)
+                    foreach (var roi in _roiCollection)
+                    {
+                        roi.Regions.CollectionChanged += OnSubRegionsChanged;//绑定新ROI集合的每一个ROI的Regions的CollectionChanged事件
+                        foreach(var r in roi.Regions)
+                        {
+                            r.PropertyChanged += OnRegionPropertyChanged;//绑定新ROI集合的每一个ROI的Regions的每一个Region的PropertyChanged事件
+                        }
+                    }
+                }
+
+                // 通知 View
+                NotifyOfPropertyChange(() => ROICollection);
+                UpdateAllStatistics();
+            }
+        }
+
+        // 2. 选中态（购物车）：扁平列表，仅包含被选中的 ROIRegion 引用
+        // 这个集合会双向绑定到 View 的 SelectedRegions
+        public ObservableCollection<ROIRegion> MySelection { get; } = new ObservableCollection<ROIRegion>();
+
         public ROI ActiveROI
         {
             get => _activeROI;
@@ -119,33 +163,7 @@ namespace RoiEditor.ViewModels.Component
             }
         }
 
-        public BindableCollection<ROIRegion> FlatROIRegions
-        {
-            get => _flatROIRegions;
-            set
-            {
-                if (ReferenceEquals(_flatROIRegions, value)) return;
 
-                // 1. 旧列表解绑
-                if (_flatROIRegions != null)
-                {
-                    _flatROIRegions.CollectionChanged -= OnFlatRegionsChanged;
-                    foreach (var item in _flatROIRegions) item.PropertyChanged -= OnRegionPropertyChanged;
-                }
-
-                _flatROIRegions = value;
-
-                // 2. 新列表绑定
-                if (_flatROIRegions != null)
-                {
-                    _flatROIRegions.CollectionChanged += OnFlatRegionsChanged;
-                    foreach (var item in _flatROIRegions) item.PropertyChanged += OnRegionPropertyChanged;
-                }
-
-                NotifyOfPropertyChange(() => FlatROIRegions);
-                UpdateAllStatistics();
-            }
-        }
 
         public Rect ActualMapBounds
         {
@@ -185,9 +203,6 @@ namespace RoiEditor.ViewModels.Component
         public CanvasViewModel(IEventAggregator eventAggregator)
         {
             _eventAggregator = eventAggregator;
-            _flatROIRegions = new BindableCollection<ROIRegion>();
-            _flatROIRegions.CollectionChanged += OnFlatRegionsChanged;
-
             // 监听选中列表变化
             MySelection.CollectionChanged += OnSelectionChanged;
         }
@@ -200,15 +215,15 @@ namespace RoiEditor.ViewModels.Component
 
         protected override void OnDeactivate(bool close)
         {
-            // 解绑 FlatROIRegions
-            if (FlatROIRegions != null)
-            {
-                FlatROIRegions.CollectionChanged -= OnFlatRegionsChanged;
-            }
-
             // 解绑 MySelection
             if (close)
             {
+                if (ROICollection != null)
+                {
+                    ROICollection.CollectionChanged -= OnROICollectionChanged;
+                    // 如果需要彻底解绑，也可以遍历解绑 SubRegions
+                }
+
                 foreach (var r in MySelection)
                     r.PropertyChanged -= OnRegionPropertyChanged;
 
@@ -237,6 +252,82 @@ namespace RoiEditor.ViewModels.Component
         #endregion
 
         #region Collection & Property Change Handlers
+        /// <summary>
+        /// 第一层监听：ROI组的增删
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void OnROICollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            //新增ROI时
+            if(e.NewItems != null)
+            {
+                foreach(ROI roi in e.NewItems)
+                {
+                    //监听新增的ROI内部的Regions的变化
+                    roi.Regions.CollectionChanged += OnSubRegionsChanged;
+                    //监听新增的ROI内部的Region的属性的变化(Points)
+                    foreach(var r in roi.Regions)
+                    {
+                        r.PropertyChanged += OnRegionPropertyChanged;
+                    }
+                }
+            }
+
+            //删除ROI时
+            if(e.OldItems != null)
+            {
+                foreach(ROI roi in e.OldItems)
+                {
+                    roi.Regions.CollectionChanged -= OnSubRegionsChanged;
+                    foreach (var r in roi.Regions) r.PropertyChanged -= OnRegionPropertyChanged;
+                }
+            }
+
+            //ROI组的增删也需要重新计算
+            UpdateAllStatistics();
+        }
+
+        /// <summary>
+        /// 第二层监听：Region的增删
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void OnSubRegionsChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            //新增Region时
+            if(e.NewItems != null)
+            {
+                //监听Region内部属性的变化
+                foreach(ROIRegion r in e.NewItems)
+                {
+                    r.PropertyChanged += OnRegionPropertyChanged;
+                }
+            }
+
+            //删除Region时
+            if(e.OldItems != null)
+            {
+                //解绑对Region内部属性的变化监听
+                foreach (ROIRegion r in e.OldItems) 
+                    r.PropertyChanged -= OnRegionPropertyChanged;
+            }
+
+            UpdateAllStatistics();
+        }
+
+        /// <summary>
+        /// 第三层监听：处理单个 ROI 属性变化 (Points 变化 -> 面积重算)
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void OnRegionPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == "Points")
+            {
+                UpdateAllStatistics(); // 实时更新
+            }
+        }
 
         // 1. 处理选中列表变化 (MySelection)
         private void OnSelectionChanged(object sender, NotifyCollectionChangedEventArgs e)
@@ -271,32 +362,6 @@ namespace RoiEditor.ViewModels.Component
             UpdateAllStatistics();
         }
 
-        // 2. 处理全局列表变化 (FlatROIRegions)
-        private void OnFlatRegionsChanged(object sender, NotifyCollectionChangedEventArgs e)
-        {
-            if (e.NewItems != null)
-            {
-                foreach (ROIRegion item in e.NewItems)
-                    item.PropertyChanged += OnRegionPropertyChanged;
-            }
-
-            if (e.OldItems != null)
-            {
-                foreach (ROIRegion item in e.OldItems)
-                    item.PropertyChanged -= OnRegionPropertyChanged;
-            }
-
-            UpdateAllStatistics();
-        }
-
-        // 3. 处理单个 ROI 属性变化 (Points 变化 -> 面积重算)
-        private void OnRegionPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
-        {
-            if (e.PropertyName == "Points")
-            {
-                UpdateAllStatistics(); // 实时更新
-            }
-        }
 
         #endregion
 
@@ -322,9 +387,18 @@ namespace RoiEditor.ViewModels.Component
 
             // 3. 计算全局所有的
             double totalArea = 0;
-            if (FlatROIRegions != null)
+            if(ROICollection != null)
             {
-                foreach (var r in FlatROIRegions) totalArea += CalculateArea(r);
+                foreach(var roi in ROICollection)
+                {
+                    if(roi.Regions != null)
+                    {
+                        foreach(var r in roi.Regions)
+                        {
+                            totalArea += CalculateArea(r);
+                        }
+                    }
+                }
             }
             TotalAreaInfo = $"Total ROI: {FormatArea(totalArea)}";
         }

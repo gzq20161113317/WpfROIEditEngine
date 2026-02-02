@@ -12,7 +12,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         <controls:RoiEditorCanvas Grid.Row="0"
-                            ItemsSource="{Binding FlatROIRegions}"
+                            ItemsSource="{Binding ROICollection}"
                             ROIOperationMode="{Binding CurrentOperationMode}"
                             SelectedRegions="{Binding MySelection}"
                             MapPath="{Binding MapPath}"
