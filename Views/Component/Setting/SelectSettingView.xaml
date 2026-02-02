@@ -79,11 +79,11 @@
                     </Grid.ColumnDefinitions>
 
                     <Button Grid.Column="0" Content="Expand (+)" 
-                            cal:Message.Attach="Inflate(true)"
+                            cal:Message.Attach="Inflate('true')"
                             Background="#333" Foreground="White" BorderThickness="0" Height="30"/>
 
                     <Button Grid.Column="2" Content="Shrink (-)" 
-                            cal:Message.Attach="Inflate(false)"
+                            cal:Message.Attach="Inflate('false')"
                             Background="#333" Foreground="White" BorderThickness="0" Height="30"/>
                 </Grid>
             </StackPanel>

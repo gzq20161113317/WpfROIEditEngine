@@ -11,10 +11,18 @@ using System.Windows;
 
 namespace RoiEditor.ViewModels.Component.Setting
 {
-    public class SelectSettingViewModel : Screen,IHandle<ActiveROIChangedEvent>
+    public class SelectSettingViewModel : Screen,
+        IHandle<ActiveROIChangedEvent>,
+        IHandle<MapInfoChangedEvent>
     {
         private readonly IEventAggregator _eventAggregator;
         private ROI _currentActiveROI;
+
+        // === 边界检查 ===
+        private double _minX = 0;
+        private double _minY = 0;
+        private double _maxX = double.MaxValue;
+        private double _maxY = double.MaxValue;
 
         // === 绑定属性 ===
         private double _targetLineWidth = 1.0;
@@ -50,6 +58,15 @@ namespace RoiEditor.ViewModels.Component.Setting
             _currentActiveROI = message.ActiveROI;
         }
 
+        public void Handle(MapInfoChangedEvent message)
+        {
+            // 更新边界限制
+            _minX = message.MapBounds.Left;
+            _minY = message.MapBounds.Top;
+            _maxX = message.MapBounds.Right;
+            _maxY = message.MapBounds.Bottom;
+        }
+
         // === 功能 1: 应用线宽 (对 ActiveROI 下的所有 Region) ===
         public void ApplyLineWidth()
         {
@@ -68,9 +85,17 @@ namespace RoiEditor.ViewModels.Component.Setting
         {
             if (_currentActiveROI == null) return;
 
-            // 获取选中的 Region
-            var selectedRegions = _currentActiveROI.Regions.Where(r => r.IsSelected).ToList();
-            if (selectedRegions.Count == 0) return;
+            // 1. 优先获取明确选中的 Region
+            var targetRegions = _currentActiveROI.Regions.Where(r => r.IsSelected).ToList();
+
+            // 2. 【核心修改】如果没有选中任何 Region，但 ActiveROI 下有东西，默认操作整个 ActiveROI
+            if (targetRegions.Count == 0 && _currentActiveROI.Regions.Count > 0)
+            {
+                targetRegions = _currentActiveROI.Regions.ToList();
+            }
+
+            // 3. 实在没有操作对象才退出
+            if (targetRegions.Count == 0) return;
 
             Vector offset = new Vector(0, 0);
             switch (direction.ToLower())
@@ -81,17 +106,30 @@ namespace RoiEditor.ViewModels.Component.Setting
                 case "down": offset.Y = MoveStep; break;
             }
 
-            foreach (var region in selectedRegions)
+            // 4. 改为遍历 targetRegions
+            foreach (var region in targetRegions)
             {
                 if (region.Points == null) continue;
                 var newPoints = new List<Point>(region.Points.Count);
+                bool isOutOfBounds = false;
                 foreach (var p in region.Points)
                 {
-                    newPoints.Add(p + offset);
+                    Point nextP = p + offset;
+                    newPoints.Add(nextP);
+
+                    // 检查单个点是否越界
+                    if (!IsValidPoint(nextP))
+                    {
+                        isOutOfBounds = true;
+                        break; // 只要有一个点越界，整个形状就不允许移动
+                    }
                 }
 
-                // 赋值回去，ROIRegion.Points 的 Setter 会被调用 -> 触发 Canvas 重绘
-                region.Points = newPoints;
+                // 只有在不越界的情况下才应用
+                if (!isOutOfBounds)
+                {
+                    region.Points = newPoints;
+                }
             }
         }
 
@@ -100,12 +138,22 @@ namespace RoiEditor.ViewModels.Component.Setting
         public void Inflate(bool isInflate)
         {
             if (_currentActiveROI == null) return;
-            var selectedRegions = _currentActiveROI.Regions.Where(r => r.IsSelected).ToList();
-            if (selectedRegions.Count == 0) return;
+
+            // 1. 同样的逻辑：优先选中的，没有则全选
+            var targetRegions = _currentActiveROI.Regions.Where(r => r.IsSelected).ToList();
+
+            // 2. 回退策略
+            if (targetRegions.Count == 0 && _currentActiveROI.Regions.Count > 0)
+            {
+                targetRegions = _currentActiveROI.Regions.ToList();
+            }
+
+            if (targetRegions.Count == 0) return;
 
             double amount = isInflate ? InflateAmount : -InflateAmount;
 
-            foreach (var region in selectedRegions)
+            // 3. 改为遍历 targetRegions
+            foreach (var region in targetRegions)
             {
                 InflateRegion(region, amount);
             }
@@ -163,11 +211,37 @@ namespace RoiEditor.ViewModels.Component.Setting
                 }
             }
 
-            // 赋值回去，触发通知
+            // 统一边界检查
             if (newPoints != null)
             {
-                region.Points = newPoints;
+                bool isOutOfBounds = false;
+                foreach (var p in newPoints)
+                {
+                    if (!IsValidPoint(p))
+                    {
+                        isOutOfBounds = true;
+                        break;
+                    }
+                }
+
+                // 只有所有点都在界内，才赋值
+                if (!isOutOfBounds)
+                {
+                    region.Points = newPoints;
+                }
             }
         }
+
+        // === 辅助方法 ===
+        private bool IsValidPoint(Point p)
+        {
+            // 至少不能小于 0
+            if (p.X < _minX || p.Y < _minY) return false;
+
+            // 如果你有地图的最大宽/高，可以在这里启用
+            if (p.X > _maxX || p.Y > _maxY) return false;
+
+            return true;
+        } 
     }
 }

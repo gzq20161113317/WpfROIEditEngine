@@ -78,6 +78,22 @@ namespace RoiEditor.Controls
             nameof(ActiveROI), typeof(ROI), typeof(RoiEditorCanvas),
             new PropertyMetadata(null));
 
+        // 定义一个锁，用于区分“内部设置”还是“外部设置”
+        private bool _isSettingMapBoundsInternal = false;
+
+        public static readonly DependencyProperty ActualMapBoundsProperty = DependencyProperty.Register(
+            nameof(ActualMapBounds), typeof(Rect), typeof(RoiEditorCanvas),
+            new FrameworkPropertyMetadata(
+                Rect.Empty,
+                FrameworkPropertyMetadataOptions.BindsTwoWayByDefault,
+                OnActualMapBoundsChanged)); // 注册回调
+
+        public Rect ActualMapBounds
+        {
+            get => (Rect)GetValue(ActualMapBoundsProperty);
+            set => SetValue(ActualMapBoundsProperty, value);
+        }
+
         public ROI ActiveROI
         {
             get => (ROI)GetValue(ActiveROIProperty);
@@ -284,10 +300,12 @@ namespace RoiEditor.Controls
                             SelectedRegions.Remove(item);
                             selectionChanged = true;
                         }
+                        item.PropertyChanged -= OnItemPropertyChanged;
                     }
                 }
 
-                // 如果是 Reset (如 Clear 操作)，直接清空选中
+                // 特别注意：Reset 时 e.OldItems 通常为 null，但意味着整个列表被清空或重置
+                // 如果是 Reset，通常建议清空所有选中项
                 if (e.Action == NotifyCollectionChangedAction.Reset)
                 {
                     if (SelectedRegions.Count > 0)
@@ -297,6 +315,28 @@ namespace RoiEditor.Controls
                         selectionChanged = true;
                     }
                 }
+            }
+
+            if (e.Action == NotifyCollectionChangedAction.Reset)
+            {
+                // ItemsSource 是当前最新的完整列表
+                if (ItemsSource != null)
+                {
+                    foreach (var item in ItemsSource)
+                    {
+                        // 先退订一次保平安（防止重复订阅），再订阅
+                        item.PropertyChanged -= OnItemPropertyChanged;
+                        item.PropertyChanged += OnItemPropertyChanged;
+                    }
+                }
+            }
+            // =========================================================
+
+            // 2. 处理常规新增 (Add)
+            if (e.NewItems != null)
+            {
+                foreach (ROIRegion item in e.NewItems)
+                    item.PropertyChanged += OnItemPropertyChanged;
             }
 
             // 2. 如果选中项确实变少了，需要检查“主选中项(SelectedROIRegion)”是否也挂了
@@ -319,18 +359,6 @@ namespace RoiEditor.Controls
                         _isInternalUpdate = false;
                     }
                 }
-            }
-
-            // 监听 Item 属性变更
-            if (e.NewItems != null)
-            {
-                foreach (ROIRegion item in e.NewItems)
-                    item.PropertyChanged += OnItemPropertyChanged;
-            }
-            if (e.OldItems != null)
-            {
-                foreach (ROIRegion item in e.OldItems)
-                    item.PropertyChanged -= OnItemPropertyChanged;
             }
 
             // 3. 常规重建索引和重绘
@@ -375,6 +403,20 @@ namespace RoiEditor.Controls
             if (e.NewValue is IEventAggregator newEa) newEa.Subscribe(c);
         }
 
+        private static void OnActualMapBoundsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var canvas = (RoiEditorCanvas)d;
+
+            // 如果不是内部逻辑触发的变更，说明是外部有人在瞎改，直接改回去！
+            if (!canvas._isSettingMapBoundsInternal)
+            {
+                // 恢复旧值
+                canvas.SetCurrentValue(ActualMapBoundsProperty, e.OldValue);
+                // 可选：打个 Debug 日志骂一句
+                System.Diagnostics.Debug.WriteLine("[Warning] ActualMapBounds is read-only!");
+            }
+        }
+
         // =========================
         // Public API
         // =========================
@@ -382,12 +424,16 @@ namespace RoiEditor.Controls
         {
             if (string.IsNullOrEmpty(path)) return;
 
-            // 【关键修改】不再只判断文件夹，而是“不存在文件夹 且 不存在文件”才退出
+            // 不再只判断文件夹，而是“不存在文件夹 且 不存在文件”才退出
             if (!System.IO.Directory.Exists(path) && !System.IO.File.Exists(path))
                 return;
 
             // 1. 加载地图数据 (MapService 会自动识别单图/切片)
             _mapService.LoadMap(path);
+            // 加锁赋值
+            _isSettingMapBoundsInternal = true;
+            SetCurrentValue(ActualMapBoundsProperty, _mapService.EffectiveRegion);
+            _isSettingMapBoundsInternal = false;
             MaxLevel = _mapService.MaxLevel;
 
             // 2. 版本号递增 (让旧的异步加载失效)

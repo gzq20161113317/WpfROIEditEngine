@@ -15,6 +15,7 @@
                             ItemsSource="{Binding FlatROIRegions}"
                             ROIOperationMode="{Binding CurrentOperationMode}"
                             MapPath="{Binding MapPath}"
+                            ActualMapBounds="{Binding ActualMapBounds,Mode=OneWayToSource}"
                             MaxLevel="{Binding MaxLevel, Mode=OneWayToSource}" 
                             CurrentLevel="{Binding CurrentLevel, Mode=OneWayToSource}"
                             EventAggregator="{Binding EventAggregator}"

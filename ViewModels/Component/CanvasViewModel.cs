@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows;
 
 namespace RoiEditor.ViewModels.Component
 {
@@ -21,6 +22,7 @@ namespace RoiEditor.ViewModels.Component
         private int _maxLevel;
         private ROI _activeROI;
         private ROIRegion _selectedROIRegion;
+        private Rect _actualMapBounds;
 
         /// <summary>
         /// 永远不要给FlatROIRegions新引用，只Add，Remove，AddRange，Clear
@@ -101,6 +103,19 @@ namespace RoiEditor.ViewModels.Component
                     // 2. 发送事件，确保 SelectSettingViewModel 能收到并更新 _currentActiveROI
                     _eventAggregator.PublishOnUIThread(new ActiveROIChangedEvent(_selectedROIRegion.Parent));
                 }
+            }
+        }
+
+        public Rect ActualMapBounds
+        {
+            get => _actualMapBounds;
+            set
+            {
+                if(_actualMapBounds == value) return;
+                _actualMapBounds = value;
+                NotifyOfPropertyChange(() => ActualMapBounds);
+                // 核心逻辑：只要地图边界变了，就通知全系统
+                _eventAggregator.PublishOnUIThread(new MapInfoChangedEvent(_actualMapBounds));
             }
         }
 
