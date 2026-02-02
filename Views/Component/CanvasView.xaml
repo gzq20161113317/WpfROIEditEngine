@@ -14,6 +14,7 @@
         <controls:RoiEditorCanvas Grid.Row="0"
                             ItemsSource="{Binding FlatROIRegions}"
                             ROIOperationMode="{Binding CurrentOperationMode}"
+                            SelectedRegions="{Binding MySelection}"
                             MapPath="{Binding MapPath}"
                             ActualMapBounds="{Binding ActualMapBounds,Mode=OneWayToSource}"
                             MaxLevel="{Binding MaxLevel, Mode=OneWayToSource}" 

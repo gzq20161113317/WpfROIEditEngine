@@ -80,17 +80,12 @@ namespace RoiEditor.ViewModels
             }
         }
 
-        private void OnRegionsCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
-        {
-            SyncRegions(e);
-        }
-
         /// <summary>
-        /// ROI的Regions列表的2号委托
-        /// 用于将新加的Region拍扁喂给Canvas，渲染图像
+        /// ROI的Regions列表集合变更事件
         /// </summary>
+        /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void SyncRegions(NotifyCollectionChangedEventArgs e)
+        private void OnRegionsCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
         {
             if (e.NewItems != null) FlatRegions.AddRange(e.NewItems.Cast<ROIRegion>());
             if (e.OldItems != null) FlatRegions.RemoveRange(e.OldItems.Cast<ROIRegion>());

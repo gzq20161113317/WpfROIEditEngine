@@ -78,6 +78,33 @@ namespace RoiEditor.Controls
             nameof(ActiveROI), typeof(ROI), typeof(RoiEditorCanvas),
             new PropertyMetadata(null));
 
+        public static readonly DependencyProperty SelectedRegionsProperty = DependencyProperty.Register(
+            nameof(SelectedRegions),
+            typeof(ObservableCollection<ROIRegion>), // 强类型，方便 Tool 使用
+            typeof(RoiEditorCanvas),
+            new FrameworkPropertyMetadata(null, (d, e) =>
+            {
+                var canvas = d as RoiEditorCanvas;
+                // 当 ViewModel 绑定的列表传进来时，View 自动重绘
+                if (e.OldValue is ObservableCollection<ROIRegion> oldList)
+                {
+                    oldList.CollectionChanged -= canvas.OnSelectedRegionsCollectionChanged;
+                }
+                if (e.NewValue is ObservableCollection<ROIRegion> newList)
+                {
+                    newList.CollectionChanged += canvas.OnSelectedRegionsCollectionChanged;
+                }
+                // 列表对象都换了，肯定要重画
+                canvas.RenderEditorLayer();
+            }));
+
+        // 2. 属性包装器 (保持名称不变，这样 SelectROIRegionTool 不需要改代码)
+        public ObservableCollection<ROIRegion> SelectedRegions
+        {
+            get => (ObservableCollection<ROIRegion>)GetValue(SelectedRegionsProperty);
+            set => SetValue(SelectedRegionsProperty, value);
+        }
+
         // 定义一个锁，用于区分“内部设置”还是“外部设置”
         private bool _isSettingMapBoundsInternal = false;
 
@@ -142,10 +169,7 @@ namespace RoiEditor.Controls
             set => SetValue(EventAggregatorProperty, value);
         }
 
-        /// <summary>
-        /// 多选集合：这是实际的选中逻辑核心
-        /// </summary>
-        public ObservableCollection<ROIRegion> SelectedRegions { get; } = new ObservableCollection<ROIRegion>();
+        
 
         //获取有效区 (代理 MapService)
         public Rect ValidRegion => _mapService.EffectiveRegion;
@@ -187,7 +211,7 @@ namespace RoiEditor.Controls
         public RoiEditorCanvas()
         {
             InitializeComponent();
-
+            SetCurrentValue(SelectedRegionsProperty, new ObservableCollection<ROIRegion>());
             InitializeRenderLayers();
 
             _tilePool = new TilePool(MapCanvas, initialCount: 50);
@@ -202,8 +226,6 @@ namespace RoiEditor.Controls
                     RenderStaticLayer();
                 }
             };
-
-            SelectedRegions.CollectionChanged += OnSelectedRegionsChanged;
 
             Unloaded += OnUnloaded;
             Loaded += OnLoaded;
@@ -260,9 +282,6 @@ namespace RoiEditor.Controls
                     }
                 }
 
-                // 4. 重新订阅 SelectedRegions (多选列表监听)
-                SelectedRegions.CollectionChanged -= OnSelectedRegionsChanged;
-                SelectedRegions.CollectionChanged += OnSelectedRegionsChanged;
 
                 // 5. 重建空间索引
                 RebuildSpatialIndex();
@@ -291,6 +310,14 @@ namespace RoiEditor.Controls
 
             _editorHost = new VisualHost();
             EditorLayer.Children.Add(_editorHost);
+        }
+
+        // 3. 集合内容变化回调 (负责重绘)
+        // 注意：以前这里负责发 EventAggregator，现在删掉发事件代码，只保留重绘
+        private void OnSelectedRegionsCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            // 如果集合变了（比如 Tool 往里 Add 了一个 ROI），View 负责刷新画面
+            RenderEditorLayer();
         }
 
         // =========================
@@ -832,16 +859,26 @@ namespace RoiEditor.Controls
             _staticHost.SetVisual(visual);
         }
 
+        // [Controls/RoiEditorCanvas.xaml.cs]
+
         private void RenderEditorLayer()
         {
+            // 1. 保护 _editorHost：防止在构造函数 InitializeRenderLayers() 之前被调用
+            if (_editorHost == null) return;
+
             var visual = new DrawingVisual();
-            if(SelectedRegions.Count > 0)
+
+            // 2. 保护 SelectedRegions：防止为 null 时访问 .Count 导致崩溃
+            // 修改处：增加 SelectedRegions != null 判断
+            if (SelectedRegions != null && SelectedRegions.Count > 0)
             {
                 using (var dc = visual.RenderOpen())
                 {
-                    _renderer.DrawEditorLayer(dc,SelectedRegions,MainMatrix.Matrix);
+                    // _renderer 是字段初始化，通常不为空，但保险起见也可以检查
+                    _renderer?.DrawEditorLayer(dc, SelectedRegions, MainMatrix.Matrix);
                 }
             }
+
             _editorHost.SetVisual(visual);
         }
 
@@ -892,13 +929,6 @@ namespace RoiEditor.Controls
                     //CurrentSettings = _currentTool.SettingsViewModel;
                 }
             }
-        }
-
-        private void OnSelectedRegionsChanged(object sender, NotifyCollectionChangedEventArgs e)
-        {
-            // 只要选中项列表发生了任何变化 (Add, Remove, Reset)，就向 ViewModel 广播最新名单
-            // 这里的 SelectedRegions 是最新的列表
-            EventAggregator?.PublishOnUIThread(new RegionSelectionChangedEvent(SelectedRegions));
         }
 
         #region MouseAction
@@ -1479,8 +1509,6 @@ namespace RoiEditor.Controls
                 foreach (var item in ItemsSource)
                     item.PropertyChanged -= OnItemPropertyChanged;
             }
-
-            SelectedRegions.CollectionChanged -= OnSelectedRegionsChanged;
         }
 
     }
