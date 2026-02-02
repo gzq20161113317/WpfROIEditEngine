@@ -22,9 +22,24 @@
                             ActiveROI="{Binding ActiveROI}"
                             SelectedROIRegion="{Binding SelectedROIRegion, Mode=TwoWay}"
                             Background="#1E1E1E"/>
-        <StatusBar Grid.Row="1">
+        <StatusBar Grid.Row="1" Background="#333" Foreground="#CCC">
             <StatusBarItem>
-                <TextBlock Text="{Binding LevelStatusString}" FontWeight="Bold"/>
+                <TextBlock Text="{Binding LevelStatusString}" FontWeight="Bold" Foreground="White"/>
+            </StatusBarItem>
+            <Separator/>
+
+            <StatusBarItem>
+                <TextBlock Text="{Binding SelectedAreaInfo}" Foreground="#007ACC" FontWeight="Bold"/>
+            </StatusBarItem>
+            <Separator/>
+
+            <StatusBarItem>
+                <TextBlock Text="{Binding ActiveROIAreaInfo}"/>
+            </StatusBarItem>
+            <Separator/>
+
+            <StatusBarItem>
+                <TextBlock Text="{Binding TotalAreaInfo}"/>
             </StatusBarItem>
         </StatusBar>
     </Grid>

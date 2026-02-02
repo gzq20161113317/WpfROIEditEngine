@@ -88,6 +88,7 @@
     <Compile Include="Events\ActiveROIChangedEvent.cs" />
     <Compile Include="Events\FitToCoarsestRequestEvent.cs" />
     <Compile Include="Events\MapInfoChangedEvent.cs" />
+    <Compile Include="Events\RegionSelectionChangedEvent.cs" />
     <Compile Include="Events\ROIDrawModeChangedEvent.cs" />
     <Compile Include="Events\ROIOperationModeChangedEvent.cs" />
     <Compile Include="Models\ROI.cs" />

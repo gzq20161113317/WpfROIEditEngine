@@ -203,6 +203,8 @@ namespace RoiEditor.Controls
                 }
             };
 
+            SelectedRegions.CollectionChanged += OnSelectedRegionsChanged;
+
             Unloaded += OnUnloaded;
 
             _debounceTimer = new DispatcherTimer
@@ -833,6 +835,13 @@ namespace RoiEditor.Controls
             }
         }
 
+        private void OnSelectedRegionsChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            // 只要选中项列表发生了任何变化 (Add, Remove, Reset)，就向 ViewModel 广播最新名单
+            // 这里的 SelectedRegions 是最新的列表
+            EventAggregator?.PublishOnUIThread(new RegionSelectionChangedEvent(SelectedRegions));
+        }
+
         #region MouseAction
         private void OnMouseWheelZoom(object sender, MouseWheelEventArgs e)
         {
@@ -1411,6 +1420,8 @@ namespace RoiEditor.Controls
                 foreach (var item in ItemsSource)
                     item.PropertyChanged -= OnItemPropertyChanged;
             }
+
+            SelectedRegions.CollectionChanged -= OnSelectedRegionsChanged;
         }
 
     }

@@ -45,7 +45,7 @@ namespace RoiEditor.ViewModels.Component
                 NotifyOfPropertyChange(() => SelectedROI);
 
                 // 发送事件，通知 ToolBar 等组件
-                _eventAggregator.PublishOnUIThreadAsync(new ActiveROIChangedEvent(_selectedROI));
+                _eventAggregator.PublishOnUIThread(new ActiveROIChangedEvent(_selectedROI));
             }
         }
 
@@ -76,8 +76,8 @@ namespace RoiEditor.ViewModels.Component
             var result = MessageBox.Show($"Are you sure you want to delete ROI '{roi.Name}'?", "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (result == MessageBoxResult.Yes)
             {
-                ROIS.Remove(roi);
                 if (SelectedROI == roi) SelectedROI = null;
+                ROIS.Remove(roi);
             }
         }
 
