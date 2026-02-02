@@ -248,6 +248,10 @@ namespace RoiEditor.ViewModels.Component
         {
             base.OnDeactivate(close);
             _eventAggregator.Unsubscribe(this);
+            foreach (var r in _multiSelectedRegions)
+                r.PropertyChanged -= OnRegionPropertyChanged;
+            _multiSelectedRegions.Clear();
+            _multiSelectedRegions = null;
         }
 
 
