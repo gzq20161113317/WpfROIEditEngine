@@ -3,6 +3,7 @@ using RoiEditor.Enums;
 using RoiEditor.Events;
 using RoiEditor.Models;
 using RoiEditor.Resources;
+using System.Linq;
 using System.Windows.Media;
 
 namespace RoiEditor.ViewModels.Component
@@ -23,7 +24,8 @@ namespace RoiEditor.ViewModels.Component
     }
 
     public class ToolBarViewModel : Screen,
-        IHandle<ActiveROIChangedEvent>
+        IHandle<ActiveROIChangedEvent>,
+        IHandle<ROIOperationModeChangedEvent>
     {
         private readonly IEventAggregator _eventAggregator;
         private ROIOperationMode _currentOperationMode = ROIOperationMode.ROI_OS_Pan;
@@ -53,7 +55,7 @@ namespace RoiEditor.ViewModels.Component
         {
             _eventAggregator = eventAggregator;
             InitializeTools();
-            UpdateToolStates(null);
+            UpdateToolVisualState(ROIOperationMode.ROI_OS_Pan);
         }
 
         private void InitializeTools()
@@ -121,8 +123,6 @@ namespace RoiEditor.ViewModels.Component
             // 初始化高亮状态
             UpdateDrawModeHighlight();
 
-            // 默认选中 Pan
-            HandleToolSelection(panTool);
         }
 
         // 4. 关键辅助方法：创建并建立父子关系
@@ -160,15 +160,37 @@ namespace RoiEditor.ViewModels.Component
                 CurrentOperationMode = selected.ToolType;
 
                 //3.互斥高亮
-                foreach (var group in Groups)
+                UpdateToolVisualState(selected.ToolType);
+            }
+        }
+
+        private void UpdateToolVisualState(ROIOperationMode mode)
+        {
+            foreach (var group in Groups)
+            {
+                if (group == _booleanGroup) continue;
+
+                foreach (var item in group.Items)
                 {
+                    // 1. 检查主工具类型是否匹配
+                    bool isMatch = (item.ToolType == mode);
 
-                    if (group == _booleanGroup) continue;
-
-                    foreach (var item in group.Items)
+                    // 2. 如果主工具不匹配，检查一下子工具 (防止模式是 "Zoom_Out" 但按钮还显示 "Zoom_In")
+                    // 如果系统强行切换到一个隐藏在下拉菜单里的模式，我们需要把父按钮更新并点亮
+                    if (!isMatch && item.SubTools != null)
                     {
-                        item.IsActive = (item == selected);
+                        var matchSub = item.SubTools.FirstOrDefault(s => s.ToolType == mode);
+                        if (matchSub != null)
+                        {
+                            // 找到了！更新父按钮的外观
+                            item.Name = matchSub.Name;
+                            item.IconData = matchSub.IconData;
+                            item.ToolType = matchSub.ToolType;
+                            isMatch = true;
+                        }
                     }
+
+                    item.IsActive = isMatch;
                 }
             }
         }
@@ -219,6 +241,38 @@ namespace RoiEditor.ViewModels.Component
         public void Handle(ActiveROIChangedEvent message)
         {
             UpdateToolStates(message.ActiveROI);
+        }
+        // 处理模式变更事件 (解决删除 ROI 后 UI 不同步的问题)
+        public void Handle(ROIOperationModeChangedEvent message)
+        {
+            // 防止死循环 (如果是自己发出的，就不处理，或者处理也没关系，因为值一样)
+            if (_currentOperationMode == message.CurrentOperationMode) return;
+
+            // 1. 更新内部数据 (不触发 Setter 里的 Publish，防止循环广播)
+            _currentOperationMode = message.CurrentOperationMode;
+            NotifyOfPropertyChange(() => CurrentOperationMode);
+
+            // 2. 记得同步更新 Boolean 组的显隐
+            UpdateBooleanGroupVisibility();
+
+            // 3. 【关键】同步更新 UI 高亮
+            UpdateToolVisualState(_currentOperationMode);
+
+            // 4. 更新记录的状态
+            if (!IsActionOnlyMode(_currentOperationMode))
+            {
+                _lastActiveStateMode = _currentOperationMode;
+            }
+        }
+
+        // 辅助判断是否是瞬时动作
+        private bool IsActionOnlyMode(ROIOperationMode mode)
+        {
+            return mode == ROIOperationMode.ROI_OS_Delete_Range ||
+                   mode == ROIOperationMode.ROI_OS_Zoom_In ||
+                   mode == ROIOperationMode.ROI_OS_Zoom_Out ||
+                   mode == ROIOperationMode.ROI_OS_Zoom_Resume ||
+                   mode == ROIOperationMode.ROI_OS_Undo;
         }
 
         // 【核心逻辑】根据是否有 ActiveROI 更新按钮可用性

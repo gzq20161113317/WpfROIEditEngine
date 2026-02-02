@@ -1,4 +1,5 @@
 ﻿using Caliburn.Micro;
+using RoiEditor.Enums;
 using RoiEditor.Events;
 using RoiEditor.Models;
 using System;
@@ -76,8 +77,57 @@ namespace RoiEditor.ViewModels.Component
             var result = MessageBox.Show($"Are you sure you want to delete ROI '{roi.Name}'?", "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (result == MessageBoxResult.Yes)
             {
-                if (SelectedROI == roi) SelectedROI = null;
+
+                // ==========================================================
+                // 步骤 1: 记录“案发现场” (获取被删除项的索引)
+                // ==========================================================
+                int index = ROIS.IndexOf(roi);
+
+                // ==========================================================
+                // 步骤 2: 安全辞职 (先清空 SelectedROI，防止幽灵数据)
+                // ==========================================================
+                if (SelectedROI == roi)
+                {
+                    // 注意：这里设为 null 是为了切断 Canvas 的引用，
+                    // 稍后我们会马上赋予一个新的 SelectedROI，所以界面闪烁几乎不可见
+                    SelectedROI = null;
+                }
+
+                // ==========================================================
+                // 步骤 3: 物理销户 (从集合中移除)
+                // ==========================================================
                 ROIS.Remove(roi);
+
+                // ==========================================================
+                // 步骤 4: 善后处理 (自动选中 or 切换模式)
+                // ==========================================================
+                if (ROIS.Count > 0)
+                {
+                    // A. 还有剩余 ROI -> 自动选中“上一个”
+
+                    // 逻辑解释：
+                    // 如果删除了 index=2 (第3个)，我们希望选中 index=1 (第2个)。
+                    // 如果删除了 index=0 (第1个)，我们希望选中 index=0 (新的第1个)。
+                    int newIndex = index - 1;
+
+                    // 兜底：不能小于 0
+                    if (newIndex < 0) newIndex = 0;
+
+                    // 执行选中
+                    if (newIndex < ROIS.Count)
+                    {
+                        SelectedROI = ROIS[newIndex];
+                    }
+                }
+                else
+                {
+                    // B. 删光了 -> 自动切换到 Pan (拖拽/浏览) 模式
+                    // 这样用户删完最后一个 ROI 后，鼠标左键就可以直接拖动地图了，体验很丝滑
+
+                    // 【注意】请确认你的枚举名是 ROIOperationMode.Pan 还是其他 (如 Drag)
+                    _eventAggregator.PublishOnUIThread(new ROIOperationModeChangedEvent(ROIOperationMode.ROI_OS_Pan));
+                }
+
             }
         }
 

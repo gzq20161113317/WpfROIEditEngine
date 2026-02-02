@@ -49,21 +49,6 @@ namespace RoiEditor.ViewModels
             Items.Add(ROIListVM);
             Items.Add(SettingVM);
             Items.Add(Canvas);
-
-            //核心逻辑：数据同步
-            //当用户再ROIListVM里增加/删除"墙"时，MainVM负责把"砖"搬运到FlatRegions
-            ROIListVM.ROIS.CollectionChanged += OnROIListChanged;
-
-            if (ROIListVM.ROIS.Count > 0)
-            {
-                foreach (var roi in ROIListVM.ROIS)
-                {
-                    // 同步现有数据
-                    FlatRegions.AddRange(roi.Regions);
-                    // 挂载监听器
-                    roi.Regions.CollectionChanged += OnRegionsCollectionChanged;
-                }
-            }
         }
 
 
@@ -120,25 +105,36 @@ namespace RoiEditor.ViewModels
 
         protected override void OnActivate()
         {
+            //核心逻辑：数据同步
+            //当用户再ROIListVM里增加/删除"墙"时，MainVM负责把"砖"搬运到FlatRegions
+            ROIListVM.ROIS.CollectionChanged += OnROIListChanged;
+
+            if (ROIListVM.ROIS.Count > 0)
+            {
+                foreach (var roi in ROIListVM.ROIS)
+                {
+                    // 同步现有数据
+                    FlatRegions.AddRange(roi.Regions);
+                    // 挂载监听器
+                    roi.Regions.CollectionChanged += OnRegionsCollectionChanged;
+                }
+            }
             base.OnActivate();
             _eventAggregator.Subscribe(this);
         }
 
         protected override void OnDeactivate(bool close)
         {
-            if (close)
+            // A. 退订 ROI 列表的主监听
+            if (ROIListVM != null && ROIListVM.ROIS != null)
             {
-                // A. 退订 ROI 列表的主监听
-                if (ROIListVM != null && ROIListVM.ROIS != null)
-                {
-                    ROIListVM.ROIS.CollectionChanged -= OnROIListChanged;
+                ROIListVM.ROIS.CollectionChanged -= OnROIListChanged;
 
-                    // B. 遍历现有 ROI，退订每一个 Region 的监听
-                    foreach (var roi in ROIListVM.ROIS)
-                    {
-                        // 使用我们之前提取的具名方法进行解订阅
-                        roi.Regions.CollectionChanged -= OnRegionsCollectionChanged;
-                    }
+                // B. 遍历现有 ROI，退订每一个 Region 的监听
+                foreach (var roi in ROIListVM.ROIS)
+                {
+                    // 使用我们之前提取的具名方法进行解订阅
+                    roi.Regions.CollectionChanged -= OnRegionsCollectionChanged;
                 }
             }
             base.OnDeactivate(close);

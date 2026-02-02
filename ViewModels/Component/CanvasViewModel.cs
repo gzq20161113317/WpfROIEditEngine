@@ -30,11 +30,8 @@ namespace RoiEditor.ViewModels.Component
         private string _selectedAreaInfo;//当前选中(支持多选)
         // 本地缓存的多选列表
         private List<ROIRegion> _multiSelectedRegions = new List<ROIRegion>();
-
-        /// <summary>
-        /// 永远不要给FlatROIRegions新引用，只Add，Remove，AddRange，Clear
-        /// </summary>
-        public BindableCollection<ROIRegion> FlatROIRegions { get; set; } = new BindableCollection<ROIRegion>();
+        private BindableCollection<ROIRegion> _flatROIRegions;
+    
         public IEventAggregator EventAggregator => _eventAggregator;
         // 用于界面显示的格式化字符串
         public string LevelStatusString => $"Layer: {CurrentLevel} / {MaxLevel}";
@@ -42,8 +39,7 @@ namespace RoiEditor.ViewModels.Component
         public CanvasViewModel(IEventAggregator eventAggregator)
         {
             _eventAggregator = eventAggregator;
-            // 监听总列表增删
-            FlatROIRegions.CollectionChanged += OnFlatRegionsChanged;
+            _flatROIRegions = new BindableCollection<ROIRegion>();
         }
 
         public string MapPath
@@ -91,7 +87,12 @@ namespace RoiEditor.ViewModels.Component
         public ROI ActiveROI
         {
             get => _activeROI;
-            set { _activeROI = value; NotifyOfPropertyChange(() => ActiveROI); }
+            set 
+            { 
+                _activeROI = value;
+                NotifyOfPropertyChange(() => ActiveROI);
+                UpdateAllStatistics();
+            }
         }
 
         // 当前选中 ROI
@@ -112,6 +113,36 @@ namespace RoiEditor.ViewModels.Component
                     // 2. 发送事件，确保 SelectSettingViewModel 能收到并更新 _currentActiveROI
                     _eventAggregator.PublishOnUIThread(new ActiveROIChangedEvent(_selectedROIRegion.Parent));
                 }
+            }
+        }
+
+        public BindableCollection<ROIRegion> FlatROIRegions
+        {
+            get => _flatROIRegions;
+            set
+            {
+                if (ReferenceEquals(_flatROIRegions, value)) return;
+
+                // 1. 搬家前：在旧房子(List A)里拆掉监控摄像头
+                if (_flatROIRegions != null)
+                {
+                    _flatROIRegions.CollectionChanged -= OnFlatRegionsChanged;
+                    foreach (var item in _flatROIRegions) item.PropertyChanged -= OnRegionPropertyChanged;
+                }
+
+                _flatROIRegions = value;
+
+                // 2. 搬家后：在新房子(List B)里装上监控摄像头
+                if (_flatROIRegions != null)
+                {
+                    _flatROIRegions.CollectionChanged += OnFlatRegionsChanged;
+                    foreach (var item in _flatROIRegions) item.PropertyChanged += OnRegionPropertyChanged;
+                }
+
+                // 3. 【关键】大喊一声：“地址换了！”，让 View 也赶紧看新房子
+                NotifyOfPropertyChange(() => FlatROIRegions);
+
+                UpdateAllStatistics();
             }
         }
 
@@ -158,18 +189,7 @@ namespace RoiEditor.ViewModels.Component
         // 1. 处理多选变化
         public void Handle(RegionSelectionChangedEvent message)
         {
-            // A. 退订旧的 (防止内存泄漏)
-            foreach (var r in _multiSelectedRegions)
-                r.PropertyChanged -= OnRegionPropertyChanged;
-
-            // B. 更新列表
             _multiSelectedRegions = message.SelectedRegions;
-
-            // C. 订阅新的 (监听拖拽变化)
-            foreach (var r in _multiSelectedRegions)
-                r.PropertyChanged += OnRegionPropertyChanged;
-
-            // D. 立即计算
             UpdateAllStatistics();
         }
 
@@ -183,6 +203,32 @@ namespace RoiEditor.ViewModels.Component
         }
         private void OnFlatRegionsChanged(object sender, NotifyCollectionChangedEventArgs e)
         {
+            // 1. 处理新增项
+            if (e.NewItems != null)
+            {
+                foreach (ROIRegion item in e.NewItems)
+                {
+                    // 这里的 += 保证了以后无论你在哪里改这个 ROI 的 Points，Canvas 都会知道
+                    item.PropertyChanged += OnRegionPropertyChanged;
+                }
+            }
+
+            // 2. 处理移除项
+            if (e.OldItems != null)
+            {
+                foreach (ROIRegion item in e.OldItems)
+                {
+                    item.PropertyChanged -= OnRegionPropertyChanged;
+                }
+            }
+
+            // 3. 处理清空 (Reset)
+            if (e.Action == NotifyCollectionChangedAction.Reset)
+            {
+                // 如果发生了 Reset，最稳妥的是全部重算，但解订阅比较麻烦
+                // 通常建议尽量避免 Reset，或者在这里尝试遍历旧列表解订阅（如果能拿到的话）
+            }
+
             UpdateAllStatistics();
         }
 
@@ -198,7 +244,7 @@ namespace RoiEditor.ViewModels.Component
             {
                 foreach (var r in _multiSelectedRegions) selArea += CalculateArea(r);
             }
-            SelectedAreaInfo = $"Selected: {FormatArea(selArea)}";
+            SelectedAreaInfo = $"Selected Regions: {FormatArea(selArea)}";
 
             // 2. 计算当前 ActiveROI 的
             double roiArea = 0;
@@ -214,7 +260,7 @@ namespace RoiEditor.ViewModels.Component
             {
                 foreach (var r in FlatROIRegions) totalArea += CalculateArea(r);
             }
-            TotalAreaInfo = $"Total: {FormatArea(totalArea)}";
+            TotalAreaInfo = $"Total ROI: {FormatArea(totalArea)}";
         }
 
         // 鞋带公式计算面积
@@ -246,20 +292,25 @@ namespace RoiEditor.ViewModels.Component
 
         protected override void OnActivate()
         {
+            // 监听总列表增删
+            FlatROIRegions.CollectionChanged += OnFlatRegionsChanged;
             base.OnActivate();
             _eventAggregator.Subscribe(this);
         }
 
         protected override void OnDeactivate(bool close)
         {
-            if (close)
+            if (FlatROIRegions != null)
             {
                 FlatROIRegions.CollectionChanged -= OnFlatRegionsChanged;
+            }
+            if(close)
+            {
                 foreach (var r in _multiSelectedRegions)
                     r.PropertyChanged -= OnRegionPropertyChanged;
                 _multiSelectedRegions.Clear();
                 _multiSelectedRegions = null;
-            }
+            }   
             base.OnDeactivate(close);
             _eventAggregator.Unsubscribe(this);
         }

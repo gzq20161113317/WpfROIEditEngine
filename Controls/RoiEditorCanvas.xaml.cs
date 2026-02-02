@@ -206,6 +206,7 @@ namespace RoiEditor.Controls
             SelectedRegions.CollectionChanged += OnSelectedRegionsChanged;
 
             Unloaded += OnUnloaded;
+            Loaded += OnLoaded;
 
             _debounceTimer = new DispatcherTimer
             {
@@ -218,6 +219,64 @@ namespace RoiEditor.Controls
             };
 
             InitializeTools();
+        }
+
+        private void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            // 如果之前被清理过，现在需要复活
+            if (_isCleanedUp)
+            {
+                _isCleanedUp = false;
+
+                // 1. 重建定时器 (Cleanup 中把它设为 null 了)
+                if (_debounceTimer == null)
+                {
+                    _debounceTimer = new DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromMilliseconds(50)
+                    };
+                    _debounceTimer.Tick += (s, args) =>
+                    {
+                        _debounceTimer.Stop();
+                        UpdateTiles();
+                    };
+                }
+
+                // 2. 重新订阅 EventAggregator
+                // 注意：EventAggregatorProperty 的回调可能不会再次触发，所以要手动订
+                if (EventAggregator != null)
+                {
+                    EventAggregator.Subscribe(this);
+                }
+
+                // 3. 重新订阅 ItemsSource (ROI 数据监听)
+                if (ItemsSource != null)
+                {
+                    foreach (var item in ItemsSource)
+                    {
+                        // 先退订一次保平安，再订阅
+                        item.PropertyChanged -= OnItemPropertyChanged;
+                        item.PropertyChanged += OnItemPropertyChanged;
+                    }
+                }
+
+                // 4. 重新订阅 SelectedRegions (多选列表监听)
+                SelectedRegions.CollectionChanged -= OnSelectedRegionsChanged;
+                SelectedRegions.CollectionChanged += OnSelectedRegionsChanged;
+
+                // 5. 重建空间索引
+                RebuildSpatialIndex();
+
+                // 6. 强制刷新画面
+                // 恢复加载状态
+                if (!string.IsNullOrEmpty(_mapService.MapPath))
+                {
+                    // 重新触发一次加载逻辑（不会重置缩放，但会重新加载可见瓦片）
+                    UpdateTiles();
+                }
+                RenderStaticLayer();
+                RenderEditorLayer();
+            }
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
