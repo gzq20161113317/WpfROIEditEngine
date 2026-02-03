@@ -16,6 +16,7 @@ namespace RoiEditor.Models
         private Color _color;
         private bool _isSelected;
         private bool _isVisible = true;
+        private ObservableCollection<ROIRegion> _regions;
         public string Name
         {
             get => _name;
@@ -54,11 +55,37 @@ namespace RoiEditor.Models
             }
         }
 
-        public ObservableCollection<ROIRegion> Regions { get; set; } = new ObservableCollection<ROIRegion>();
+        public ObservableCollection<ROIRegion> Regions
+        {
+            get => _regions;
+            set 
+            {
+                if (_regions == value) return;
+                // A. 解绑旧列表的事件（防止内存泄漏）
+                if (_regions != null)
+                {
+                    _regions.CollectionChanged -= Regions_CollectionChanged;
+                }
+
+                _regions = value;
+
+                // B. 绑定新列表的事件
+                if (_regions != null)
+                {
+                    _regions.CollectionChanged += Regions_CollectionChanged;
+                }
+
+                NotifyOfPropertyChange(() => Regions);
+                // C. 列表整体替换时，立即更新数量
+                NotifyOfPropertyChange(() => RegionCount);
+            }
+        }
+
+        public int RegionCount => Regions?.Count ?? 0;
 
         public ROI()
         {
-            Regions.CollectionChanged += Regions_CollectionChanged;
+            Regions = new ObservableCollection<ROIRegion>();
         }
 
         /// <summary>
@@ -78,6 +105,8 @@ namespace RoiEditor.Models
 
             if (e.OldItems != null)
                 foreach (ROIRegion item in e.OldItems) item.Parent = null;
+
+            NotifyOfPropertyChange(() => RegionCount);
         }
     }
 }

@@ -183,12 +183,19 @@
                                     </Border.Background>
                                 </Border>
 
-                                <TextBlock Grid.Column="2" Text="{Binding Name}" 
-                                    VerticalAlignment="Center" 
-                                    HorizontalAlignment="Center"
-                                    Foreground="#D4D4D4" 
-                                    FontSize="12" 
-                                    TextTrimming="CharacterEllipsis"/>
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="5,0">
+
+                                    <TextBlock Text="{Binding Name}" 
+                                       Foreground="#D4D4D4" 
+                                       FontSize="12" 
+                                       FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis"/>
+
+                                    <TextBlock Text="{Binding RegionCount, StringFormat='{}{0} items'}" 
+                                       Foreground="Gray" 
+                                       FontSize="9" 
+                                       Margin="0,2,0,0"/>
+                                </StackPanel>
 
                                 <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,5,0">
 

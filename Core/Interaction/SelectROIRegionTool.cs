@@ -106,6 +106,11 @@ namespace RoiEditor.Core.Interaction
                             // 4. 应用修正后的 delta
                             MoveSelectedRegions(realDelta);
 
+                            foreach (var r in _canvas.SelectedRegions)
+                            {
+                                r.NotifyOfPropertyChange("Points");
+                            }
+
                             // 注意：这里更新 _lastMouseWorld 需要小心，为了平滑体验，
                             // 我们通常更新为 "加上了 realDelta 的旧位置"，而不是鼠标的真实位置
                             // 或者简单点，直接让 _lastMouseWorld = wPos，但在边界会有“滑手”的感觉
@@ -119,6 +124,13 @@ namespace RoiEditor.Core.Interaction
                         // 拉伸时，直接限制鼠标位置即可
                         Point clampedPos = _canvas.ClampToValidRegion(wPos);
                         ResizeROIRegion(_canvas.SelectedROIRegion, _dragMode, clampedPos);
+
+                        // 手动通知：告诉 ViewModel 属性变了，该算面积了！
+                        if (_canvas.SelectedROIRegion != null)
+                        {
+                            _canvas.SelectedROIRegion.NotifyOfPropertyChange("Points");
+                        }
+
                         _lastMouseWorld = wPos; // 拉伸时可以直接更随鼠标
                     }
                     _canvas.RedrawEditorLayer();

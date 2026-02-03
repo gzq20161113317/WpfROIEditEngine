@@ -43,7 +43,7 @@ namespace RoiEditor.Controls
         // Dependency Properties
         // =========================
         public static readonly DependencyProperty ItemsSourceProperty = DependencyProperty.Register(
-            nameof(ItemsSource), typeof(IObservableCollection<ROI>), typeof(RoiEditorCanvas),
+            nameof(ItemsSource), typeof(ObservableCollection<ROI>), typeof(RoiEditorCanvas),
             new PropertyMetadata(null, OnItemsSourceChanged));
 
         public static readonly DependencyProperty ROIOperationModeProperty = DependencyProperty.Register(
@@ -76,27 +76,15 @@ namespace RoiEditor.Controls
 
         public static readonly DependencyProperty ActiveROIProperty = DependencyProperty.Register(
             nameof(ActiveROI), typeof(ROI), typeof(RoiEditorCanvas),
-            new PropertyMetadata(null));
+            new PropertyMetadata(null, OnActiveROIChanged));
 
         public static readonly DependencyProperty SelectedRegionsProperty = DependencyProperty.Register(
             nameof(SelectedRegions),
             typeof(ObservableCollection<ROIRegion>), // 强类型，方便 Tool 使用
             typeof(RoiEditorCanvas),
-            new FrameworkPropertyMetadata(null, (d, e) =>
-            {
-                var canvas = d as RoiEditorCanvas;
-                // 当 ViewModel 绑定的列表传进来时，View 自动重绘
-                if (e.OldValue is ObservableCollection<ROIRegion> oldList)
-                {
-                    oldList.CollectionChanged -= canvas.OnSelectedRegionsCollectionChanged;
-                }
-                if (e.NewValue is ObservableCollection<ROIRegion> newList)
-                {
-                    newList.CollectionChanged += canvas.OnSelectedRegionsCollectionChanged;
-                }
-                // 列表对象都换了，肯定要重画
-                canvas.RenderEditorLayer();
-            }));
+            new FrameworkPropertyMetadata(null,OnSelectedROIRegionsChanged));
+
+       
 
         // 2. 属性包装器 (保持名称不变，这样 SelectROIRegionTool 不需要改代码)
         public ObservableCollection<ROIRegion> SelectedRegions
@@ -139,9 +127,9 @@ namespace RoiEditor.Controls
             set => SetValue(CurrentLevelProperty, value);
         }
 
-        public IObservableCollection<ROI> ItemsSource
+        public ObservableCollection<ROI> ItemsSource
         {
-            get => (IObservableCollection<ROI>)GetValue(ItemsSourceProperty);
+            get => (ObservableCollection<ROI>)GetValue(ItemsSourceProperty);
             set => SetValue(ItemsSourceProperty, value);
         }
 
@@ -487,23 +475,35 @@ namespace RoiEditor.Controls
             RenderEditorLayer();
         }
 
-        // 辅助方法：检查删除的项是否被选中
-        private void CheckSelectionOnRemove(NotifyCollectionChangedEventArgs e)
+
+        private static void OnSelectedROIRegionsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            if (e.Action == NotifyCollectionChangedAction.Remove || e.Action == NotifyCollectionChangedAction.Reset)
+            var canvas = d as RoiEditorCanvas;
+            // 当 ViewModel 绑定的列表传进来时，View 自动重绘
+            if (e.OldValue is ObservableCollection<ROIRegion> oldList)
             {
-                if (e.OldItems != null && SelectedRegions != null)
-                {
-                    foreach (ROIRegion item in e.OldItems)
-                    {
-                        if (SelectedRegions.Contains(item))
-                        {
-                            item.IsSelected = false;
-                            SelectedRegions.Remove(item);
-                        }
-                    }
-                }
+                oldList.CollectionChanged -= canvas.OnSelectedRegionsCollectionChanged;
             }
+            if (e.NewValue is ObservableCollection<ROIRegion> newList)
+            {
+                newList.CollectionChanged += canvas.OnSelectedRegionsCollectionChanged;
+            }
+            // 列表对象都换了，肯定要重画
+            canvas.RenderEditorLayer();
+        }
+
+        private static void OnActiveROIChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var canvas = (RoiEditorCanvas)d;
+
+            // 切换当前激活层时，必须强制重绘静态层
+            // 作用 1：确保刚才被反选的物体（IsSelected=false）能立刻画在静态层上。
+            // 作用 2：如果渲染器对 Active 层有特殊颜色处理（如高亮），这里能立即响应。
+            canvas.RenderStaticLayer();
+
+            // 通常不需要重绘 EditorLayer，因为 ActiveROI 变化通常伴随着 SelectedRegions 的变化，
+            // 后者自己会触发 EditorLayer 重绘。但如果你想绝对保险，加上也无妨。
+            // canvas.RenderEditorLayer(); 
         }
 
         private static void OnSelectedROIRegionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -886,7 +886,7 @@ namespace RoiEditor.Controls
                 // 2. 绘制静态 ROI
                 if (ItemsSource != null)
                 {
-                    _renderer.DrawStaticLayer(dc, FlatRegions, _hoverROIRegion, MainMatrix.Matrix.M11);
+                    _renderer.DrawStaticLayer(dc, FlatRegions.ToList(), _hoverROIRegion, MainMatrix.Matrix.M11);
                 }
             }
 
@@ -1061,6 +1061,11 @@ namespace RoiEditor.Controls
 
         #endregion
 
+
+        // =========================
+        // 供Tool使用的Canvas接口
+        // =========================
+
         /// <summary>
         /// 立即刷新：用于Zoom跨层，Fit，Resize等必须立刻更新瓦片的场景
         /// </summary>
@@ -1127,7 +1132,10 @@ namespace RoiEditor.Controls
 
         internal void RebuildSpatialIndex()
         {
-            if (FlatRegions == null || FlatRegions.Count() == 0)
+            // 这里把 FlatRegions 缓存一下，防止多次求值
+            var allRegions = FlatRegions.ToList();
+
+            if (allRegions.Count == 0)
             {
                 _spatialIndex = null;
                 return;
@@ -1149,7 +1157,7 @@ namespace RoiEditor.Controls
                 maxObjects: 20,
                 maxLevels: 8);
 
-            foreach (var item in FlatRegions)
+            foreach (var item in allRegions)
             {
                 if (item?.Points != null && item.Points.Count >= 3)
                     _spatialIndex.Insert(item);
@@ -1425,6 +1433,20 @@ namespace RoiEditor.Controls
                 RenderEditorLayer();
                 RenderStaticLayer();
             }
+        }
+
+        // 辅助方法：获取当前可视的世界区域
+        private Rect GetVisibleWorldRect()
+        {
+            // 获取控件的大小
+            double w = ActualWidth;
+            double h = ActualHeight;
+
+            // 反解矩阵，求出屏幕四个角对应的世界坐标
+            Point p1 = MainMatrix.Inverse.Transform(new Point(0, 0));
+            Point p2 = MainMatrix.Inverse.Transform(new Point(w, h));
+
+            return new Rect(p1, p2);
         }
 
         /// <summary>

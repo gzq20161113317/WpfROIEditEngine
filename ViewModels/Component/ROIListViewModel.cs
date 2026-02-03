@@ -25,7 +25,9 @@ namespace RoiEditor.ViewModels.Component
             ROIS = new ObservableCollection<ROI>();
         }
 
-        // 这里的 ROI 列表是“数据源头”
+        /// <summary>
+        /// 上帝集合！！！
+        /// </summary>
         public ObservableCollection<ROI> ROIS { get; }
 
         public ROI SelectedROI

@@ -85,6 +85,7 @@ namespace RoiEditor.ViewModels.Component
         }
 
         // 1. 数据源（仓库）：树状结构，包含所有 ROI
+        // 等于ROIListViewModel里的ROIS
         public ObservableCollection<ROI> ROICollection
         {
             get => _roiCollection;
@@ -138,9 +139,37 @@ namespace RoiEditor.ViewModels.Component
             get => _activeROI;
             set
             {
+                if (ReferenceEquals(_activeROI, value)) return;
+
                 _activeROI = value;
+
+                //切换层级时，安全清理选中项
+                if (MySelection.Count > 0)
+                {
+                    var firstSelection = MySelection[0];
+                    // 如果选中项不属于当前激活的层，说明需要清理
+                    if (firstSelection.Parent != _activeROI)
+                    {
+                        // 1. 先把列表复制一份（因为后面我们要改集合）
+                        var toRemove = MySelection.ToList();
+
+                        // 2. 手动遍历，把状态改对
+                        foreach (var item in toRemove)
+                        {
+                            item.IsSelected = false; // 【关键】让它能回静态层显示
+                            item.PropertyChanged -= OnRegionPropertyChanged; // 【关键】防止内存泄漏
+                        }
+
+                        // 3. 最后再清空集合
+                        MySelection.Clear();
+
+                        // 4. 置空主选中项
+                        SelectedROIRegion = null;
+                    }
+                }
+
                 NotifyOfPropertyChange(() => ActiveROI);
-                UpdateAllStatistics(); // ActiveROI 变了，重新统计
+                UpdateAllStatistics();
             }
         }
 
@@ -281,6 +310,13 @@ namespace RoiEditor.ViewModels.Component
                 {
                     roi.Regions.CollectionChanged -= OnSubRegionsChanged;
                     foreach (var r in roi.Regions) r.PropertyChanged -= OnRegionPropertyChanged;
+
+                    // 2. 防守逻辑：如果删掉的正好是当前的 ActiveROI，将其置空
+                    if (ReferenceEquals(roi, ActiveROI))
+                    {
+                        ActiveROI = null; // 或者设为 ROICollection.FirstOrDefault();
+
+                    }
                 }
             }
 
