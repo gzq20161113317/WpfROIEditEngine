@@ -272,7 +272,7 @@ namespace RoiEditor.Core.Interaction
         {
             if (item == null || item.Points == null || item.Points.Count == 0) return;
 
-            if (item.Type == Enums.ROIRegionType.Circle)
+            if (item.Type == Enums.ROIRegionType.Ellipse)
             {
                 ResizeCircleBBox(item, handle, currentWorldPos);
                 return;
@@ -377,7 +377,7 @@ namespace RoiEditor.Core.Interaction
             switch (item.Type)
             {
                 case Enums.ROIRegionType.Rectangle: NormalizeRectangle(item); break;
-                case Enums.ROIRegionType.Circle: NormalizeCircle(item); break;
+                case Enums.ROIRegionType.Ellipse: NormalizeCircle(item); break;
             }
         }
 

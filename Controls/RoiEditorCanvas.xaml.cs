@@ -1275,7 +1275,9 @@ namespace RoiEditor.Controls
 
             foreach (var item in allRegions)
             {
-                if (item?.Points != null && item.Points.Count >= 3)
+                // 椭圆只需要 2 个点，其他形状需要至少 3 个点
+                int minPoints = (item?.Type == ROIRegionType.Ellipse) ? 2 : 3;
+                if (item?.Points != null && item.Points.Count >= minPoints)
                     _spatialIndex.Insert(item);
             }
         }
@@ -1346,7 +1348,9 @@ namespace RoiEditor.Controls
                 for (int j = roi.Regions.Count - 1; j >= 0; j--)
                 {
                     var region = roi.Regions[j];
-                    if (region?.Points == null || region.Points.Count < 3) continue;
+                    // 椭圆只需要 2 个点，其他形状需要至少 3 个点
+                    int minPoints = (region?.Type == ROIRegionType.Ellipse) ? 2 : 3;
+                    if (region?.Points == null || region.Points.Count < minPoints) continue;
 
                     if (filter != null && !filter(region)) continue;
 

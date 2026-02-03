@@ -44,8 +44,12 @@ namespace RoiEditor.Core.Rendering
 
             foreach (var item in items)
             {
-                if (item == null || item.Points == null || item.Points.Count < 3) continue;
+                // 椭圆只需要 2 个点，其他形状需要至少 3 个点
+                int minPoints = (item?.Type == Enums.ROIRegionType.Ellipse) ? 2 : 3;
+                if (item == null || item.Points == null || item.Points.Count < minPoints) continue;
                 if (item.IsSelected) continue; // 选中的由 EditorLayer 画
+
+                System.Diagnostics.Debug.WriteLine($"[RoiRenderer] Drawing item: Type={item.Type}, Points.Count={item.Points.Count}, IsSelected={item.IsSelected}");
 
                 var geom = BuildGeometry(item);
 
@@ -227,13 +231,24 @@ namespace RoiEditor.Core.Rendering
                             break;
                         }
 
-                    case Enums.ROIRegionType.Circle:
+                    case Enums.ROIRegionType.Ellipse:
                         {
-                            if (pts.Count < 2) break;
+                            if (pts.Count < 2)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"[RoiRenderer] Ellipse has less than 2 points: {pts.Count}");
+                                break;
+                            }
 
                             double rx = Math.Abs(pts[1].X - pts[0].X) / 2.0;
                             double ry = Math.Abs(pts[1].Y - pts[0].Y) / 2.0;
-                            if (rx < 1e-6 || ry < 1e-6) break;
+
+                            System.Diagnostics.Debug.WriteLine($"[RoiRenderer] Ellipse: pts[0]={pts[0]}, pts[1]={pts[1]}, rx={rx}, ry={ry}");
+
+                            if (rx < 1e-6 || ry < 1e-6)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"[RoiRenderer] Ellipse radius too small: rx={rx}, ry={ry}");
+                                break;
+                            }
 
                             Point center = new Point((pts[0].X + pts[1].X) / 2.0, (pts[0].Y + pts[1].Y) / 2.0);
 
