@@ -180,6 +180,13 @@ namespace RoiEditor.ViewModels.Component
                     return; // 不需要发射信号，也不需要回弹
                 }
 
+                // 特殊处理：SplitROI
+                if (selected.Name == "ROIS_SplitROI")
+                {
+                    ROIListVM?.SplitROI();
+                    return; // 不需要发射信号，也不需要回弹
+                }
+
                 /// 1. 【发射信号】强制通知 Canvas 执行动作
                 CurrentOperationMode = selected.ToolType;
 

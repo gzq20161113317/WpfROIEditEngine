@@ -67,6 +67,7 @@
     <Compile Include="Core\Attributes\RoiToolAttribute.cs" />
     <Compile Include="Core\Helpers\ScopeGuard.cs" />
     <Compile Include="Core\Interaction\CreateRectTool.cs" />
+    <Compile Include="Core\Interaction\DeleteRangeTool.cs" />
     <Compile Include="Core\Interaction\IInteractionTool.cs" />
     <Compile Include="Core\Interaction\PanTool.cs" />
     <Compile Include="Core\Interaction\PenTool.cs" />
@@ -83,10 +84,12 @@
     <Compile Include="Core\Undo\Commands\ClearAllROICommand.cs" />
     <Compile Include="Core\Undo\Commands\CreateRegionCommand.cs" />
     <Compile Include="Core\Undo\Commands\CreateROICommand.cs" />
+    <Compile Include="Core\Undo\Commands\DeleteMultipleRegionsCommand.cs" />
     <Compile Include="Core\Undo\Commands\DeleteRegionCommand.cs" />
     <Compile Include="Core\Undo\Commands\DeleteROICommand.cs" />
     <Compile Include="Core\Undo\Commands\MoveRegionCommand.cs" />
     <Compile Include="Core\Undo\Commands\ResizeRegionCommand.cs" />
+    <Compile Include="Core\Undo\Commands\SplitROICommand.cs" />
     <Compile Include="Core\Undo\IUndoableCommand.cs" />
     <Compile Include="Core\Undo\UndoableCommandBase.cs" />
     <Compile Include="Core\Undo\UndoManager.cs" />

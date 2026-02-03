@@ -37,8 +37,10 @@ namespace RoiEditor.Core.Rendering
         {
             if (items == null) return;
 
-            // 根据缩放比动态计算线宽，保证视觉粗细一致
+            // 根据缩放比动态计算线宽
             double zoom = currentZoom <= 1e-6 ? 1 : currentZoom;
+
+            System.Diagnostics.Debug.WriteLine($"[RoiRenderer] DrawStaticLayer: zoom={zoom}, items count={items.Count()}");
 
             foreach (var item in items)
             {
@@ -47,7 +49,11 @@ namespace RoiEditor.Core.Rendering
 
                 var geom = BuildGeometry(item);
 
-                double baseThickness = item.LineWidth / zoom;
+                // 【修改】使用屏幕像素模式：LineWidth 直接表示屏幕像素，不受缩放影响
+                // 这样用户设置 LineWidth=1 就是 1 个屏幕像素，更直观
+                double baseThickness = item.LineWidth;
+
+                System.Diagnostics.Debug.WriteLine($"[RoiRenderer] Region {item.Id}: LineWidth={item.LineWidth}, baseThickness={baseThickness}");
 
                 // 1. 准备画笔和填充
                 var brush = new SolidColorBrush(item.Color) { Opacity = FILL_OPACITY };
@@ -64,7 +70,8 @@ namespace RoiEditor.Core.Rendering
                 // 3. 绘制 Hover 高亮状态 (叠加一层)
                 if (ReferenceEquals(item, hoverItem))
                 {
-                    double hoverThick = (item.LineWidth + HOVER_THICKNESS_ADD) / zoom;
+                    // 【修改】Hover 时增加 2 像素（屏幕像素）
+                    double hoverThick = item.LineWidth + 2.0;
                     var hoverPen = new Pen(new SolidColorBrush(item.Color), hoverThick)
                     {
                         // 圆头让高亮更好看

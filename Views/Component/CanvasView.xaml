@@ -17,9 +17,10 @@
                             SelectedRegions="{Binding MySelection}"
                             MapPath="{Binding MapPath}"
                             ActualMapBounds="{Binding ActualMapBounds,Mode=OneWayToSource}"
-                            MaxLevel="{Binding MaxLevel, Mode=OneWayToSource}" 
+                            MaxLevel="{Binding MaxLevel, Mode=OneWayToSource}"
                             CurrentLevel="{Binding CurrentLevel, Mode=OneWayToSource}"
                             EventAggregator="{Binding EventAggregator}"
+                            UndoManager="{Binding UndoManager}"
                             ActiveROI="{Binding ActiveROI}"
                             SelectedROIRegion="{Binding SelectedROIRegion, Mode=TwoWay}"
                             Background="#1E1E1E"/>

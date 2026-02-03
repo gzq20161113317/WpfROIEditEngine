@@ -85,7 +85,15 @@ namespace RoiEditor.Models
         public double LineWidth
         {
             get => _lineWidth;
-            set { _lineWidth = value; NotifyOfPropertyChange(() => LineWidth);  }
+            set
+            {
+                if (_lineWidth != value)
+                {
+                    _lineWidth = value;
+                    System.Diagnostics.Debug.WriteLine($"[ROIRegion] LineWidth changed to {value} for region {Id}");
+                    NotifyOfPropertyChange(() => LineWidth);
+                }
+            }
         }
 
 

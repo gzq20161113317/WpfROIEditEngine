@@ -62,6 +62,10 @@ namespace RoiEditor.Controls
             nameof(EventAggregator), typeof(IEventAggregator), typeof(RoiEditorCanvas),
             new PropertyMetadata(null, OnEventAggregatorChanged));
 
+        public static readonly DependencyProperty UndoManagerProperty = DependencyProperty.Register(
+            nameof(UndoManager), typeof(Core.Undo.UndoManager), typeof(RoiEditorCanvas),
+            new PropertyMetadata(null));
+
         public static readonly DependencyProperty CurrentLevelProperty = DependencyProperty.Register(
             nameof(CurrentLevel),
             typeof(int),
@@ -156,6 +160,16 @@ namespace RoiEditor.Controls
             get => (IEventAggregator)GetValue(EventAggregatorProperty);
             set => SetValue(EventAggregatorProperty, value);
         }
+
+        // UndoManager 属性（用于 Tool 访问）
+        public Core.Undo.UndoManager UndoManager
+        {
+            get => (Core.Undo.UndoManager)GetValue(UndoManagerProperty);
+            set => SetValue(UndoManagerProperty, value);
+        }
+
+        // Overlay Canvas（用于显示临时 UI 元素，如选择框）
+        public Canvas OverlayCanvas => CursorLayer;
 
 
 
@@ -481,6 +495,8 @@ namespace RoiEditor.Controls
         /// <param name="e"></param>
         private void OnItemPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
+            System.Diagnostics.Debug.WriteLine($"[Canvas] OnItemPropertyChanged: {e.PropertyName}");
+
             // 如果是点变了（比如 Setting 里的 Move/Inflate），需要重画 + 重建索引
             if (e.PropertyName == "Points")
             {
@@ -491,6 +507,7 @@ namespace RoiEditor.Controls
             // 如果是样式变了 (线宽, 颜色)，只需要重画
             else if (e.PropertyName == "LineWidth" || e.PropertyName == "Color")
             {
+                System.Diagnostics.Debug.WriteLine($"[Canvas] Rendering due to {e.PropertyName} change");
                 RenderStaticLayer();
                 RenderEditorLayer();
             }
@@ -1030,9 +1047,13 @@ namespace RoiEditor.Controls
         {
             if (_tools == null) return;
 
+            System.Diagnostics.Debug.WriteLine($"[Canvas] SwitchTool called with mode: {newMode}");
+
             // 1. 尝试从字典里拿出工具 (不管是 Pen 还是 FitToScreen，都在字典里)
             if (_tools.TryGetValue(newMode, out var newTool))
             {
+                System.Diagnostics.Debug.WriteLine($"[Canvas] Found tool: {newTool.GetType().Name}");
+
                 // 2. 【通用逻辑】判断工具类型
                 if (newTool.IsActionOnly)
                 {
@@ -1053,6 +1074,10 @@ namespace RoiEditor.Controls
                     // 同步配置页
                     //CurrentSettings = _currentTool.SettingsViewModel;
                 }
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[Canvas] Tool not found for mode: {newMode}");
             }
         }
 
@@ -1554,6 +1579,20 @@ namespace RoiEditor.Controls
             return new Point(x, y);
         }
 
+        // 世界坐标转屏幕坐标
+        public Point WorldToScreen(Point worldPoint)
+        {
+            return MainMatrix.Matrix.Transform(worldPoint);
+        }
+
+        // 屏幕坐标转世界坐标
+        public Point ScreenToWorld(Point screenPoint)
+        {
+            Matrix inverse = MainMatrix.Matrix;
+            inverse.Invert();
+            return inverse.Transform(screenPoint);
+        }
+
         // 矩形钳制：用于拖拽整个 ROI 时，保证不拖出去
         public Rect ClampRectToValidRegion(Rect r)
         {
@@ -1608,11 +1647,16 @@ namespace RoiEditor.Controls
                 .Where(t => typeof(IInteractionTool).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract)
                 .Where(t => t.GetCustomAttribute<RoiToolAttribute>() != null);
 
+            System.Diagnostics.Debug.WriteLine("[Canvas] Loading tools...");
             foreach (var type in toolTypes)
             {
                 var attribute = type.GetCustomAttribute<RoiToolAttribute>();
                 var toolInstance = (IInteractionTool)Activator.CreateInstance(type, this);
-                if (!_tools.ContainsKey(attribute.Mode)) _tools.Add(attribute.Mode, toolInstance);
+                if (!_tools.ContainsKey(attribute.Mode))
+                {
+                    _tools.Add(attribute.Mode, toolInstance);
+                    System.Diagnostics.Debug.WriteLine($"[Canvas] Loaded tool: {type.Name} for mode {attribute.Mode}");
+                }
             }
             _currentTool = _tools.ContainsKey(ROIOperationMode.ROI_OS_Pan) ? _tools[ROIOperationMode.ROI_OS_Pan] : null;
             _currentTool?.Activate();

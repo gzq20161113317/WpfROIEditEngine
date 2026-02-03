@@ -61,7 +61,7 @@ namespace RoiEditor.ViewModels
             ToolBar = new ToolBarViewModel(eventAggregator, _undoManager);
             ROIListVM = new ROIListViewModel(eventAggregator,windowManager, _undoManager);
             SettingVM = new SettingViewModel(eventAggregator);
-            Canvas = new CanvasViewModel(eventAggregator);
+            Canvas = new CanvasViewModel(eventAggregator, _undoManager);
 
             Canvas.ROICollection = ROIListVM.ROIS;
 

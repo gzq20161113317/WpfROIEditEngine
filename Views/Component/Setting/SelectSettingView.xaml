@@ -12,17 +12,9 @@
         <GroupBox Header="Properties" Foreground="Gray" BorderBrush="#444" Margin="0,0,0,10">
             <StackPanel Margin="5">
                 <TextBlock Text="Line Width (px):" Foreground="#CCC" Margin="0,0,0,5"/>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBox Text="{Binding TargetLineWidth}" Background="#333" Foreground="White" BorderThickness="0" Padding="5"/>
-                    <Button Grid.Column="1" Content="Apply All" 
-                            cal:Message.Attach="ApplyLineWidth"
-                            Background="#007ACC" Foreground="White" BorderThickness="0" Padding="10,0" Margin="5,0,0,0" Cursor="Hand"/>
-                </Grid>
-                <TextBlock Text="(Applies to ALL regions in active ROI)" Foreground="#666" FontSize="10" Margin="0,2,0,0"/>
+                <TextBox Text="{Binding TargetLineWidth, UpdateSourceTrigger=PropertyChanged}"
+                         Background="#333" Foreground="White" BorderThickness="0" Padding="5"/>
+                <TextBlock Text="(Auto-applies to active ROI, resets on ROI switch)" Foreground="#666" FontSize="10" Margin="0,2,0,0"/>
             </StackPanel>
         </GroupBox>
 

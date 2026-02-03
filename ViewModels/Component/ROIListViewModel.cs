@@ -20,6 +20,7 @@ namespace RoiEditor.ViewModels.Component
         private readonly IWindowManager _windowManager;
         private readonly UndoManager _undoManager;
         private ROI _selectedROI;
+        private bool _isAllVisible = true;
 
         public ROIListViewModel(IEventAggregator eventAggregator, IWindowManager windowManager, UndoManager undoManager)
         {
@@ -38,6 +39,28 @@ namespace RoiEditor.ViewModels.Component
         /// UndoManager（暴露给外部，用于快捷键绑定）
         /// </summary>
         public UndoManager UndoManager => _undoManager;
+
+        /// <summary>
+        /// 是否所有 ROI 都可见（用于 ToggleButton 绑定）
+        /// </summary>
+        public bool IsAllVisible
+        {
+            get => _isAllVisible;
+            set
+            {
+                if (_isAllVisible != value)
+                {
+                    _isAllVisible = value;
+                    NotifyOfPropertyChange(() => IsAllVisible);
+
+                    // 当状态改变时，更新所有 ROI 的可见性
+                    foreach (var roi in ROIS)
+                    {
+                        roi.IsVisible = _isAllVisible;
+                    }
+                }
+            }
+        }
 
         public ROI SelectedROI
         {
@@ -68,6 +91,14 @@ namespace RoiEditor.ViewModels.Component
 
             if (result == true && vm.ResultROI != null)
             {
+                // 重名检查
+                if (IsNameDuplicate(vm.ResultROI.Name))
+                {
+                    MessageBox.Show($"ROI name '{vm.ResultROI.Name}' already exists. Please use a different name.",
+                        "Duplicate Name", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
                 // 使用 Undo 命令
                 var command = new CreateROICommand(ROIS, vm.ResultROI, _eventAggregator);
                 _undoManager.ExecuteCommand(command);
@@ -78,10 +109,8 @@ namespace RoiEditor.ViewModels.Component
 
         public void DisplayAll()
         {
-            foreach (var roi in ROIS)
-            {
-                roi.IsVisible = true;
-            }
+            // 不需要了，逻辑已经移到 IsAllVisible 的 setter 中
+            // ToggleButton 会自动切换 IsChecked，通过绑定触发 IsAllVisible 的 setter
         }
 
         public void DeleteRoi(ROI roi)
@@ -159,6 +188,14 @@ namespace RoiEditor.ViewModels.Component
 
             if (_windowManager.ShowDialog(vm) == true)
             {
+                // 重名检查（排除自己）
+                if (vm.ROIName != roi.Name && IsNameDuplicate(vm.ROIName))
+                {
+                    MessageBox.Show($"ROI name '{vm.ROIName}' already exists. Please use a different name.",
+                        "Duplicate Name", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
                 roi.Name = vm.ROIName;
                 roi.Color = vm.SelectedColor;
             }
@@ -195,6 +232,58 @@ namespace RoiEditor.ViewModels.Component
 
                 // 注意：切换到 Pan 模式的逻辑已经在 ClearAllROICommand.Execute() 中处理
             }
+        }
+
+        // 【新增】拆分 ROI - 将当前 ROI 的每个 Region 拆分成独立的 ROI
+        public void SplitROI()
+        {
+            if (SelectedROI == null)
+            {
+                MessageBox.Show("Please select a ROI to split.", "No ROI Selected", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            if (SelectedROI.Regions == null || SelectedROI.Regions.Count == 0)
+            {
+                MessageBox.Show("The selected ROI has no regions to split.", "No Regions", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var result = MessageBox.Show(
+                $"Split ROI '{SelectedROI.Name}' into {SelectedROI.Regions.Count} separate ROI(s)?\nThis action can be undone with Ctrl+Z.",
+                "Confirm Split",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                var command = new SplitROICommand(ROIS, SelectedROI, _eventAggregator);
+                _undoManager.ExecuteCommand(command);
+
+                // 清空选中（因为原 ROI 已被删除）
+                SelectedROI = null;
+            }
+        }
+
+        // 【辅助方法】检查名字是否重复
+        private bool IsNameDuplicate(string name)
+        {
+            return ROIS.Any(r => r.Name == name);
+        }
+
+        // 【辅助方法】生成唯一的 ROI 名字
+        public string GenerateUniqueName(string baseName)
+        {
+            string newName = baseName;
+            int counter = 1;
+
+            while (IsNameDuplicate(newName))
+            {
+                newName = $"{baseName}_{counter}";
+                counter++;
+            }
+
+            return newName;
         }
 
 

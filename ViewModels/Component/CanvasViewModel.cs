@@ -19,6 +19,7 @@ namespace RoiEditor.ViewModels.Component
     {
         #region Fields & Dependencies
         private readonly IEventAggregator _eventAggregator;
+        private readonly Core.Undo.UndoManager _undoManager;
 
         // 状态字段
         private ROIOperationMode _currentOperationMode = ROIOperationMode.ROI_OS_Pan;
@@ -42,6 +43,7 @@ namespace RoiEditor.ViewModels.Component
         #region Properties
 
         public IEventAggregator EventAggregator => _eventAggregator;
+        public Core.Undo.UndoManager UndoManager => _undoManager;
         public string LevelStatusString => $"Layer: {CurrentLevel} / {MaxLevel}";
 
         public string MapPath
@@ -231,9 +233,10 @@ namespace RoiEditor.ViewModels.Component
 
         #region Constructor & Lifecycle
 
-        public CanvasViewModel(IEventAggregator eventAggregator)
+        public CanvasViewModel(IEventAggregator eventAggregator, Core.Undo.UndoManager undoManager)
         {
             _eventAggregator = eventAggregator;
+            _undoManager = undoManager;
             // 监听选中列表变化
             MySelection.CollectionChanged += OnSelectionChanged;
         }

@@ -17,12 +17,16 @@ namespace RoiEditor.ViewModels.Component.Setting
     {
         private readonly IEventAggregator _eventAggregator;
         private ROI _currentActiveROI;
+        private ROI _previousActiveROI; // 保存上一个 ROI，用于恢复默认线宽
 
         // === 边界检查 ===
         private double _minX = 0;
         private double _minY = 0;
         private double _maxX = double.MaxValue;
         private double _maxY = double.MaxValue;
+
+        // === 常量 ===
+        private const double DEFAULT_LINE_WIDTH = 1.0; // 默认线宽
 
         // === 绑定属性 ===
         private double _targetLineWidth = 1.0;
@@ -31,7 +35,20 @@ namespace RoiEditor.ViewModels.Component.Setting
         public double TargetLineWidth
         {
             get => _targetLineWidth;
-            set { _targetLineWidth = value; NotifyOfPropertyChange(() => TargetLineWidth); }
+            set
+            {
+                if (_targetLineWidth != value)
+                {
+                    _targetLineWidth = value;
+                    NotifyOfPropertyChange(() => TargetLineWidth);
+
+                    // 调试输出
+                    System.Diagnostics.Debug.WriteLine($"[SelectSetting] TargetLineWidth changed to: {value}");
+
+                    // 自动应用到当前 ActiveROI
+                    ApplyLineWidthToCurrentROI();
+                }
+            }
         }
 
         public double MoveStep
@@ -55,7 +72,21 @@ namespace RoiEditor.ViewModels.Component.Setting
         // === 事件处理：获取当前激活的 ROI ===
         public void Handle(ActiveROIChangedEvent message)
         {
+            // 1. 恢复上一个 ROI 的默认线宽
+            if (_previousActiveROI != null && _previousActiveROI.Regions != null)
+            {
+                foreach (var region in _previousActiveROI.Regions)
+                {
+                    region.LineWidth = DEFAULT_LINE_WIDTH;
+                }
+            }
+
+            // 2. 更新当前 ROI
+            _previousActiveROI = _currentActiveROI;
             _currentActiveROI = message.ActiveROI;
+
+            // 3. 应用当前线宽到新的 ActiveROI
+            ApplyLineWidthToCurrentROI();
         }
 
         public void Handle(MapInfoChangedEvent message)
@@ -70,11 +101,24 @@ namespace RoiEditor.ViewModels.Component.Setting
         // === 功能 1: 应用线宽 (对 ActiveROI 下的所有 Region) ===
         public void ApplyLineWidth()
         {
-            if (_currentActiveROI == null || _currentActiveROI.Regions == null) return;
+            ApplyLineWidthToCurrentROI();
+        }
+
+        // 内部方法：应用线宽到当前 ROI
+        private void ApplyLineWidthToCurrentROI()
+        {
+            if (_currentActiveROI == null || _currentActiveROI.Regions == null)
+            {
+                System.Diagnostics.Debug.WriteLine("[SelectSetting] No active ROI or regions");
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[SelectSetting] Applying LineWidth {TargetLineWidth} to {_currentActiveROI.Regions.Count} regions");
 
             foreach (var region in _currentActiveROI.Regions)
             {
                 region.LineWidth = TargetLineWidth;
+                System.Diagnostics.Debug.WriteLine($"[SelectSetting] Set region {region.Id} LineWidth to {TargetLineWidth}");
             }
             // 不需要手动刷新，ROIRegion 属性变更会触发 PropertyChanged，Canvas 需要监听并重绘
         }
