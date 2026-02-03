@@ -1,4 +1,5 @@
 ﻿using Caliburn.Micro;
+using RoiEditor.Core.Undo;
 using RoiEditor.Enums;
 using RoiEditor.Events;
 using RoiEditor.Models;
@@ -28,6 +29,7 @@ namespace RoiEditor.ViewModels.Component
         IHandle<ROIOperationModeChangedEvent>
     {
         private readonly IEventAggregator _eventAggregator;
+        private readonly UndoManager _undoManager;
         private ROIOperationMode _currentOperationMode = ROIOperationMode.ROI_OS_Pan;
         private ROIDrawMode _currentDrawMode = ROIDrawMode.ROI_DS_Union;
         private ToolGroupViewModel _booleanGroup;
@@ -35,6 +37,9 @@ namespace RoiEditor.ViewModels.Component
         private ROIOperationMode _lastActiveStateMode = ROIOperationMode.ROI_OS_Pan;
 
         public BindableCollection<ToolGroupViewModel> Groups { get; set; } = new BindableCollection<ToolGroupViewModel>();
+
+        // ROIListViewModel 引用（用于 ClearROIS 操作）
+        public ROIListViewModel ROIListVM { get; set; }
 
         #region Prop
         public ROIOperationMode CurrentOperationMode
@@ -51,9 +56,10 @@ namespace RoiEditor.ViewModels.Component
         }
         #endregion
 
-        public ToolBarViewModel(IEventAggregator eventAggregator)
+        public ToolBarViewModel(IEventAggregator eventAggregator, UndoManager undoManager)
         {
             _eventAggregator = eventAggregator;
+            _undoManager = undoManager;
             InitializeTools();
             UpdateToolVisualState(ROIOperationMode.ROI_OS_Pan);
         }
@@ -97,6 +103,8 @@ namespace RoiEditor.ViewModels.Component
             opItems.Add(CreateTool("Operation_Zoom", ROIOperationMode.ROI_OS_Zoom_In, zoomTools[0].IconData.ToString(), true, zoomTools));
             //4.Undo
             opItems.Add(CreateTool("Operation_Undo", ROIOperationMode.ROI_OS_Undo, Icons.Operation_Undo,true));
+            //5.Redo
+            opItems.Add(CreateTool("Operation_Redo", ROIOperationMode.ROI_OS_Redo, Icons.Operation_Redo,true));
             Groups.Add(new ToolGroupViewModel { Header = "OPERATION", Items = opItems });
 
             // ================== ROIS 分组 ==================
@@ -104,7 +112,7 @@ namespace RoiEditor.ViewModels.Component
             //1.SplitROI
             roisItems.Add(CreateTool("ROIS_SplitROI", ROIOperationMode.ROI_OS_Zoom_Out, Icons.Operation_SplitROI, true));
             //2.ClearROIS
-            roisItems.Add(CreateTool("ROIS_SplitROI", ROIOperationMode.ROI_OS_ClearROIS, Icons.Operation_ClearROIS, true));
+            roisItems.Add(CreateTool("ROIS_ClearROIS", ROIOperationMode.ROI_OS_ClearROIS, Icons.Operation_ClearROIS, true));
             //3.SaveROIS
             roisItems.Add(CreateTool("ROIS_SaveROIS", ROIOperationMode.ROI_OS_SaveROIS, Icons.Operation_SaveROIS, true));
             Groups.Add(new ToolGroupViewModel { Header = "ROIS", Items = roisItems });
@@ -145,6 +153,33 @@ namespace RoiEditor.ViewModels.Component
             // 逻辑处理：如果是纯动作（如删除），执行特定逻辑；否则切换模式
             if (selected.IsActionOnly)
             {
+                // 特殊处理：Undo
+                if (selected.ToolType == ROIOperationMode.ROI_OS_Undo)
+                {
+                    if (_undoManager.CanUndo)
+                    {
+                        _undoManager.Undo();
+                    }
+                    return; // 不需要发射信号，也不需要回弹
+                }
+
+                // 特殊处理：Redo
+                if (selected.ToolType == ROIOperationMode.ROI_OS_Redo)
+                {
+                    if (_undoManager.CanRedo)
+                    {
+                        _undoManager.Redo();
+                    }
+                    return; // 不需要发射信号，也不需要回弹
+                }
+
+                // 特殊处理：ClearROIS
+                if (selected.ToolType == ROIOperationMode.ROI_OS_ClearROIS)
+                {
+                    ROIListVM?.ClearAll();
+                    return; // 不需要发射信号，也不需要回弹
+                }
+
                 /// 1. 【发射信号】强制通知 Canvas 执行动作
                 CurrentOperationMode = selected.ToolType;
 
@@ -153,7 +188,7 @@ namespace RoiEditor.ViewModels.Component
             }
             else
             {
-                // 1. 记录这个模式，方便下次“回弹”回来
+                // 1. 记录这个模式，方便下次"回弹"回来
                 _lastActiveStateMode = selected.ToolType;
 
                 // 2. 通知 Canvas 切换
@@ -272,7 +307,9 @@ namespace RoiEditor.ViewModels.Component
                    mode == ROIOperationMode.ROI_OS_Zoom_In ||
                    mode == ROIOperationMode.ROI_OS_Zoom_Out ||
                    mode == ROIOperationMode.ROI_OS_Zoom_Resume ||
-                   mode == ROIOperationMode.ROI_OS_Undo;
+                   mode == ROIOperationMode.ROI_OS_Undo ||
+                   mode == ROIOperationMode.ROI_OS_Redo ||
+                   mode == ROIOperationMode.ROI_OS_ClearROIS;
         }
 
         // 【核心逻辑】根据是否有 ActiveROI 更新按钮可用性

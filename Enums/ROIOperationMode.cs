@@ -34,8 +34,9 @@ namespace RoiEditor.Enums
         ROI_OS_MoveDrag,
         ROI_OS_MoveShape,
         ROI_OS_MultiMove,
-        
+
         ROI_OS_Undo,
+        ROI_OS_Redo,
 
         ROI_OS_Zoom_In,
         ROI_OS_Zoom_Out,

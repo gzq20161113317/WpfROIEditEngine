@@ -1,14 +1,22 @@
 ﻿<UserControl x:Class="RoiEditor.Views.RoiMainView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:RoiEditor.Views"
              xmlns:vm="clr-namespace:RoiEditor.ViewModels"
              xmlns:controls="clr-namespace:RoiEditor.Controls"
-             mc:Ignorable="d" 
+             mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:RoiMainViewModel,IsDesignTimeCreatable=True}"
-             d:DesignHeight="1024" d:DesignWidth="1920">
+             d:DesignHeight="1024" d:DesignWidth="1920"
+             Focusable="True">
+
+    <!-- 添加快捷键绑定 -->
+    <UserControl.InputBindings>
+        <KeyBinding Key="Z" Modifiers="Control" Command="{Binding UndoCommand}" />
+        <KeyBinding Key="Y" Modifiers="Control" Command="{Binding RedoCommand}" />
+    </UserControl.InputBindings>
+
     <Grid Background="#2D2D30">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />

@@ -1,4 +1,6 @@
 ﻿using Caliburn.Micro;
+using RoiEditor.Core.Undo;
+using RoiEditor.Core.Undo.Commands;
 using RoiEditor.Enums;
 using RoiEditor.Events;
 using RoiEditor.Models;
@@ -16,12 +18,14 @@ namespace RoiEditor.ViewModels.Component
     {
         private readonly IEventAggregator _eventAggregator;
         private readonly IWindowManager _windowManager;
+        private readonly UndoManager _undoManager;
         private ROI _selectedROI;
 
-        public ROIListViewModel(IEventAggregator eventAggregator, IWindowManager windowManager)
+        public ROIListViewModel(IEventAggregator eventAggregator, IWindowManager windowManager, UndoManager undoManager)
         {
             _eventAggregator = eventAggregator;
             _windowManager = windowManager;
+            _undoManager = undoManager;
             ROIS = new ObservableCollection<ROI>();
         }
 
@@ -29,6 +33,11 @@ namespace RoiEditor.ViewModels.Component
         /// 上帝集合！！！
         /// </summary>
         public ObservableCollection<ROI> ROIS { get; }
+
+        /// <summary>
+        /// UndoManager（暴露给外部，用于快捷键绑定）
+        /// </summary>
+        public UndoManager UndoManager => _undoManager;
 
         public ROI SelectedROI
         {
@@ -59,7 +68,10 @@ namespace RoiEditor.ViewModels.Component
 
             if (result == true && vm.ResultROI != null)
             {
-                ROIS.Add(vm.ResultROI);
+                // 使用 Undo 命令
+                var command = new CreateROICommand(ROIS, vm.ResultROI, _eventAggregator);
+                _undoManager.ExecuteCommand(command);
+
                 SelectedROI = vm.ResultROI; // 自动选中新建项
             }
         }
@@ -81,7 +93,7 @@ namespace RoiEditor.ViewModels.Component
             {
 
                 // ==========================================================
-                // 步骤 1: 记录“案发现场” (获取被删除项的索引)
+                // 步骤 1: 记录"案发现场" (获取被删除项的索引)
                 // ==========================================================
                 int index = ROIS.IndexOf(roi);
 
@@ -96,16 +108,17 @@ namespace RoiEditor.ViewModels.Component
                 }
 
                 // ==========================================================
-                // 步骤 3: 物理销户 (从集合中移除)
+                // 步骤 3: 使用 Undo 命令删除
                 // ==========================================================
-                ROIS.Remove(roi);
+                var command = new DeleteROICommand(ROIS, roi, _eventAggregator);
+                _undoManager.ExecuteCommand(command);
 
                 // ==========================================================
                 // 步骤 4: 善后处理 (自动选中 or 切换模式)
                 // ==========================================================
                 if (ROIS.Count > 0)
                 {
-                    // A. 还有剩余 ROI -> 自动选中“上一个”
+                    // A. 还有剩余 ROI -> 自动选中"上一个"
 
                     // 逻辑解释：
                     // 如果删除了 index=2 (第3个)，我们希望选中 index=1 (第2个)。
@@ -157,6 +170,30 @@ namespace RoiEditor.ViewModels.Component
             if (roi != null)
             {
                 roi.IsVisible = !roi.IsVisible;
+            }
+        }
+
+        // 【新增】清空所有 ROI
+        public void ClearAll()
+        {
+            if (ROIS.Count == 0) return;
+
+            var result = MessageBox.Show(
+                $"Are you sure you want to clear all {ROIS.Count} ROI(s)?\nThis action can be undone with Ctrl+Z.",
+                "Confirm Clear All",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                // 使用 Undo 命令
+                var command = new ClearAllROICommand(ROIS, _eventAggregator);
+                _undoManager.ExecuteCommand(command);
+
+                // 清空选中
+                SelectedROI = null;
+
+                // 注意：切换到 Pan 模式的逻辑已经在 ClearAllROICommand.Execute() 中处理
             }
         }
 

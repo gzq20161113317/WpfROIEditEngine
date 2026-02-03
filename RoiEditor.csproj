@@ -80,6 +80,16 @@
     <Compile Include="Core\IO\TileLoader.cs" />
     <Compile Include="Core\Memory\TilePool.cs" />
     <Compile Include="Core\Rendering\VisualHost.cs" />
+    <Compile Include="Core\Undo\Commands\ClearAllROICommand.cs" />
+    <Compile Include="Core\Undo\Commands\CreateRegionCommand.cs" />
+    <Compile Include="Core\Undo\Commands\CreateROICommand.cs" />
+    <Compile Include="Core\Undo\Commands\DeleteRegionCommand.cs" />
+    <Compile Include="Core\Undo\Commands\DeleteROICommand.cs" />
+    <Compile Include="Core\Undo\Commands\MoveRegionCommand.cs" />
+    <Compile Include="Core\Undo\Commands\ResizeRegionCommand.cs" />
+    <Compile Include="Core\Undo\IUndoableCommand.cs" />
+    <Compile Include="Core\Undo\UndoableCommandBase.cs" />
+    <Compile Include="Core\Undo\UndoManager.cs" />
     <Compile Include="Enums\DrawMode.cs" />
     <Compile Include="Enums\RegionRelation.cs" />
     <Compile Include="Enums\ROIDrawMode.cs" />
