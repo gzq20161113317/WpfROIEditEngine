@@ -193,6 +193,7 @@ namespace RoiEditor.Controls
         private readonly Dictionary<string, Image> _visibleTiles = new Dictionary<string, Image>();
         private readonly HashSet<string> _loadingTiles = new HashSet<string>();
         private readonly Dictionary<string, CancellationTokenSource> _loadingCts = new Dictionary<string, CancellationTokenSource>();
+        private readonly object _tileLock = new object(); // 并发安全：保护瓦片相关集合
 
         private bool _isCleanedUp;
         private bool _isInternalUpdate = false;
@@ -279,19 +280,18 @@ namespace RoiEditor.Controls
                     };
                 }
 
-                // 2. 重新订阅 EventAggregator
-                // 注意：EventAggregatorProperty 的回调可能不会再次触发，所以要手动订
+                // 2. 重新订阅 EventAggregator（内存泄漏修复：先解绑再订阅）
                 if (EventAggregator != null)
                 {
+                    EventAggregator.Unsubscribe(this);
                     EventAggregator.Subscribe(this);
                 }
 
-                // 3. 重新订阅 ItemsSource (ROI 数据监听)
+                // 3. 重新订阅 ItemsSource（内存泄漏修复：先解绑再订阅）
                 if (ItemsSource != null)
                 {
                     foreach (var item in ItemsSource)
                     {
-                        // 先退订一次保平安，再订阅
                         item.PropertyChanged -= OnItemPropertyChanged;
                         item.PropertyChanged += OnItemPropertyChanged;
                     }
@@ -379,8 +379,12 @@ namespace RoiEditor.Controls
                 {
                     //监听这个新组内部Region的增删
                     roi.Regions.CollectionChanged += OnSubRegionListChanged;
-                    //监听这个新组内部Region的属性变化（Points）
-                    foreach (var r in roi.Regions) r.PropertyChanged += OnItemPropertyChanged;
+                    //监听这个新组内部Region的属性变化（Points）（内存泄漏修复：先解绑再订阅）
+                    foreach (var r in roi.Regions)
+                    {
+                        r.PropertyChanged -= OnItemPropertyChanged;
+                        r.PropertyChanged += OnItemPropertyChanged;
+                    }
                 }
             }
 
@@ -420,6 +424,8 @@ namespace RoiEditor.Controls
             {
                 foreach(ROIRegion r in e.NewItems)
                 {
+                    // 内存泄漏修复：先解绑再订阅
+                    r.PropertyChanged -= OnItemPropertyChanged;
                     r.PropertyChanged += OnItemPropertyChanged;
                 }
             }
@@ -594,13 +600,16 @@ namespace RoiEditor.Controls
 
         private void CancelAllLoading()
         {
-            foreach (var cts in _loadingCts.Values)
+            lock (_tileLock)
             {
-                try { cts.Cancel(); } catch { }
-                try { cts.Dispose(); } catch { }
+                foreach (var cts in _loadingCts.Values)
+                {
+                    try { cts.Cancel(); } catch { }
+                    try { cts.Dispose(); } catch { }
+                }
+                _loadingCts.Clear();
+                _loadingTiles.Clear();
             }
-            _loadingCts.Clear();
-            _loadingTiles.Clear();
         }
 
         // =========================
@@ -615,12 +624,26 @@ namespace RoiEditor.Controls
             if (_mapService.IsSingleFileMode)
             {
                 string key = "0_0_0"; // 假装它是唯一的瓦片
-                if (_loadingTiles.Contains(key) || _visibleTiles.ContainsKey(key)) return;
+
+                bool shouldLoad = false;
+                lock (_tileLock)
+                {
+                    if (!_loadingTiles.Contains(key) && !_visibleTiles.ContainsKey(key))
+                    {
+                        shouldLoad = true;
+                        _loadingTiles.Add(key);
+                    }
+                }
+
+                if (!shouldLoad) return;
 
                 _mapService.GetWorldSize(out double w, out double h);
                 var cts = new CancellationTokenSource();
-                _loadingCts[key] = cts;
-                _loadingTiles.Add(key);
+
+                lock (_tileLock)
+                {
+                    _loadingCts[key] = cts;
+                }
 
                 // 传入整图尺寸 w, h
                 _ = LoadTileAsync(key, _mapService.MapPath, 0, 0, w, h, _mapVersion, 0, cts.Token);
@@ -671,39 +694,49 @@ namespace RoiEditor.Controls
                 for (int c = startCol; c < endCol; c++)
                     needed.Add($"{targetLevel}_{r}_{c}");
 
-            // 差量取消：把不需要的 in-flight 任务取消掉
-            var keysToCancel = _loadingCts.Keys.Where(k => !needed.Contains(k)).ToList();
-            foreach (var k in keysToCancel)
+            // 并发安全：差量取消 - 把不需要的 in-flight 任务取消掉
+            lock (_tileLock)
             {
-                if (_loadingCts.TryGetValue(k, out var cts))
+                var keysToCancel = _loadingCts.Keys.Where(k => !needed.Contains(k)).ToList();
+                foreach (var k in keysToCancel)
                 {
-                    try { cts.Cancel(); } catch { }
-                    try { cts.Dispose(); } catch { }
+                    if (_loadingCts.TryGetValue(k, out var cts))
+                    {
+                        try { cts.Cancel(); } catch { }
+                        try { cts.Dispose(); } catch { }
+                    }
+                    _loadingCts.Remove(k);
+                    _loadingTiles.Remove(k);
                 }
-                _loadingCts.Remove(k);
-                _loadingTiles.Remove(k);
             }
 
-            // 回收不再需要的可见瓦片
-            var toRemove = _visibleTiles.Keys.Where(k => !needed.Contains(k)).ToList();
-            foreach (var k in toRemove)
+            // 并发安全：回收不再需要的可见瓦片
+            lock (_tileLock)
             {
-                var img = _visibleTiles[k];
-                _tilePool.Return(img);
-                _visibleTiles.Remove(k);
+                var toRemove = _visibleTiles.Keys.Where(k => !needed.Contains(k)).ToList();
+                foreach (var k in toRemove)
+                {
+                    var img = _visibleTiles[k];
+                    _tilePool.Return(img);
+                    _visibleTiles.Remove(k);
+                }
             }
 
             // 加载新增瓦片（中心优先调度）
             int centerRow = (startRow + endRow - 1) / 2;
             int centerCol = (startCol + endCol - 1) / 2;
 
-            // 先把需要加载的 key 收集起来
-            var loadList = new List<string>(needed.Count);
-            foreach (var k in needed)
+            // 并发安全：先把需要加载的 key 收集起来
+            List<string> loadList;
+            lock (_tileLock)
             {
-                if (_visibleTiles.ContainsKey(k)) continue;
-                if (_loadingTiles.Contains(k)) continue;
-                loadList.Add(k);
+                loadList = new List<string>(needed.Count);
+                foreach (var k in needed)
+                {
+                    if (_visibleTiles.ContainsKey(k)) continue;
+                    if (_loadingTiles.Contains(k)) continue;
+                    loadList.Add(k);
+                }
             }
 
             // 按“离中心的瓦片距离”排序：优先中心
@@ -738,12 +771,30 @@ namespace RoiEditor.Controls
                 double x = c * tileWorld;
                 double y = r * tileWorld;
 
-                var cts = new CancellationTokenSource();
-                _loadingCts[k] = cts;
-                _loadingTiles.Add(k);
+                // 并发安全：双重检查 + 原子操作
+                CancellationTokenSource cts;
+                bool shouldLoad = false;
+                lock (_tileLock)
+                {
+                    // 双重检查：防止并发情况下重复加载
+                    if (!_loadingTiles.Contains(k) && !_visibleTiles.ContainsKey(k))
+                    {
+                        cts = new CancellationTokenSource();
+                        _loadingCts[k] = cts;
+                        _loadingTiles.Add(k);
+                        shouldLoad = true;
+                    }
+                    else
+                    {
+                        cts = null;
+                    }
+                }
 
-                // 传入 tileWorld 作为宽高
-                _ = LoadTileAsync(k, tilePath, x, y, tileWorld, tileWorld, _mapVersion, targetLevel, cts.Token);
+                if (shouldLoad && cts != null)
+                {
+                    // 传入 tileWorld 作为宽高
+                    _ = LoadTileAsync(k, tilePath, x, y, tileWorld, tileWorld, _mapVersion, targetLevel, cts.Token);
+                }
             }
 
         }
@@ -784,17 +835,26 @@ namespace RoiEditor.Controls
                     if (_isCleanedUp) return;
                     if (token.IsCancellationRequested) return;
 
-                    //如果该key已经不在in-flight（被UpdateTiles取消并移除了）,直接丢弃
-                    if (!_loadingCts.ContainsKey(key) || !_loadingTiles.Contains(key))
-                        return;
+                    // 并发安全：加锁检查状态
+                    bool shouldDisplay = false;
+                    lock (_tileLock)
+                    {
+                        //如果该key已经不在in-flight（被UpdateTiles取消并移除了）,直接丢弃
+                        if (!_loadingCts.ContainsKey(key) || !_loadingTiles.Contains(key))
+                            return;
 
-                    //防切图跨版本
-                    if (mapVersion != _mapVersion) return;
+                        //防切图跨版本
+                        if (mapVersion != _mapVersion) return;
 
-                    //层级一致性：防“僵尸瓦片”
-                    //这里用expectedLevel（调度时的目标层级），并在UI线程比较CurrentLevel(最新)
-                    if(tileLevel != -1 && tileLevel != expectedLevel) return;
-                    if (CurrentLevel != expectedLevel) return;
+                        //层级一致性：防"僵尸瓦片"
+                        //这里用expectedLevel（调度时的目标层级），并在UI线程比较CurrentLevel(最新)
+                        if(tileLevel != -1 && tileLevel != expectedLevel) return;
+                        if (CurrentLevel != expectedLevel) return;
+
+                        shouldDisplay = true;
+                    }
+
+                    if (!shouldDisplay) return;
 
                     var img = _tilePool.Rent();
                     if (img == null) return;
@@ -809,10 +869,14 @@ namespace RoiEditor.Controls
                     Canvas.SetLeft(img,x);
                     Canvas.SetTop(img,y);
 
-                    if(_visibleTiles.TryGetValue(key,out var old))
-                        _tilePool.Return(old);
+                    // 并发安全：加锁更新可见瓦片集合
+                    lock (_tileLock)
+                    {
+                        if(_visibleTiles.TryGetValue(key,out var old))
+                            _tilePool.Return(old);
 
-                    _visibleTiles[key] = img;
+                        _visibleTiles[key] = img;
+                    }
                 },DispatcherPriority.Render);
             }
             catch (OperationCanceledException)
@@ -831,16 +895,20 @@ namespace RoiEditor.Controls
                     {
                         if(_isCleanedUp) return;
 
-                        _loadingTiles.Remove(key);
-
-                        if(_loadingCts.TryGetValue(key,out var cts))
+                        // 并发安全：加锁清理加载状态
+                        lock (_tileLock)
                         {
-                            _loadingCts.Remove(key);
-                            try { cts.Dispose(); } catch { }
+                            _loadingTiles.Remove(key);
+
+                            if(_loadingCts.TryGetValue(key,out var cts))
+                            {
+                                _loadingCts.Remove(key);
+                                try { cts.Dispose(); } catch { }
+                            }
                         }
                     },DispatcherPriority.Render);
                 }
-                catch (Exception ex) 
+                catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"[LoadTileAsync finally clear Error] {ex.Message}");
                 }
@@ -1573,29 +1641,35 @@ namespace RoiEditor.Controls
             // 2) 停止交互捕获（避免鼠标被控件“咬住”）
             try { ReleaseMouseCapture(); } catch { }
 
-            // 3) 取消并释放所有在途加载
+            // 3) 取消并释放所有在途加载（并发安全：加锁操作）
             try
             {
-                foreach (var cts in _loadingCts.Values.ToList())
+                lock (_tileLock)
                 {
-                    try { cts.Cancel(); } catch { }
-                    try { cts.Dispose(); } catch { }
+                    foreach (var cts in _loadingCts.Values.ToList())
+                    {
+                        try { cts.Cancel(); } catch { }
+                        try { cts.Dispose(); } catch { }
+                    }
+                    _loadingCts.Clear();
                 }
-                _loadingCts.Clear();
             }
             catch { }
 
             // 4) 清理加载状态
             try { _loadingTiles.Clear(); } catch { }
 
-            // 5) 归还所有可见瓦片到对象池
+            // 5) 归还所有可见瓦片到对象池（并发安全：加锁操作）
             try
             {
-                foreach (var img in _visibleTiles.Values.ToList())
+                lock (_tileLock)
                 {
-                    try { _tilePool.Return(img); } catch { }
+                    foreach (var img in _visibleTiles.Values.ToList())
+                    {
+                        try { _tilePool.Return(img); } catch { }
+                    }
+                    _visibleTiles.Clear();
                 }
-                _visibleTiles.Clear();
             }
             catch { }
 

@@ -244,19 +244,27 @@ namespace RoiEditor.ViewModels.Component
 
         protected override void OnDeactivate(bool close)
         {
-            // 解绑 MySelection
+            // 内存泄漏修复：无论 close 是否为 true，都解绑事件
+            if (ROICollection != null)
+            {
+                ROICollection.CollectionChanged -= OnROICollectionChanged;
+                foreach (var roi in ROICollection)
+                {
+                    roi.Regions.CollectionChanged -= OnSubRegionsChanged;
+                    foreach (var r in roi.Regions)
+                    {
+                        r.PropertyChanged -= OnRegionPropertyChanged;
+                    }
+                }
+            }
+
+            foreach (var r in MySelection)
+                r.PropertyChanged -= OnRegionPropertyChanged;
+
+            MySelection.CollectionChanged -= OnSelectionChanged;
+
             if (close)
             {
-                if (ROICollection != null)
-                {
-                    ROICollection.CollectionChanged -= OnROICollectionChanged;
-                    // 如果需要彻底解绑，也可以遍历解绑 SubRegions
-                }
-
-                foreach (var r in MySelection)
-                    r.PropertyChanged -= OnRegionPropertyChanged;
-
-                MySelection.CollectionChanged -= OnSelectionChanged;
                 MySelection.Clear();
             }
 
@@ -295,9 +303,10 @@ namespace RoiEditor.ViewModels.Component
                 {
                     //监听新增的ROI内部的Regions的变化
                     roi.Regions.CollectionChanged += OnSubRegionsChanged;
-                    //监听新增的ROI内部的Region的属性的变化(Points)
+                    //监听新增的ROI内部的Region的属性的变化(Points)（内存泄漏修复：先解绑再订阅）
                     foreach(var r in roi.Regions)
                     {
+                        r.PropertyChanged -= OnRegionPropertyChanged;
                         r.PropertyChanged += OnRegionPropertyChanged;
                     }
                 }
@@ -334,9 +343,10 @@ namespace RoiEditor.ViewModels.Component
             //新增Region时
             if(e.NewItems != null)
             {
-                //监听Region内部属性的变化
+                //监听Region内部属性的变化（内存泄漏修复：先解绑再订阅）
                 foreach(ROIRegion r in e.NewItems)
                 {
+                    r.PropertyChanged -= OnRegionPropertyChanged;
                     r.PropertyChanged += OnRegionPropertyChanged;
                 }
             }

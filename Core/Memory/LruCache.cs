@@ -7,22 +7,25 @@ using System.Threading.Tasks;
 namespace RoiEditor.Core.Memory
 {
     /// <summary>
-    /// 简单的线程安全LRU缓存
+    /// 线程安全的高性能LRU缓存
     /// TKey:瓦片路径或Key，TValue：BitmapSource
+    /// 优化：使用节点缓存，Remove操作从O(n)优化到O(1)
     /// </summary>
     /// <typeparam name="TKey"></typeparam>
     /// <typeparam name="TValue"></typeparam>
     public class LruCache<TKey,TValue>
     {
         private readonly int _capacity;
-        private readonly Dictionary<TKey, TValue> _cacheMap;
+        private readonly Dictionary<TKey, LinkedListNode<TKey>> _nodeMap; // 缓存节点引用，实现O(1)删除
+        private readonly Dictionary<TKey, TValue> _valueMap; // 存储实际值
         private readonly LinkedList<TKey> _lruList;// 维护访问顺序，头部最近使用，尾部最久未使用
         private readonly object _lock = new object();
 
         public LruCache(int capacity)
         {
             _capacity = capacity;
-            _cacheMap = new Dictionary<TKey, TValue>(capacity);
+            _nodeMap = new Dictionary<TKey, LinkedListNode<TKey>>(capacity);
+            _valueMap = new Dictionary<TKey, TValue>(capacity);
             _lruList = new LinkedList<TKey>();
         }
 
@@ -30,11 +33,12 @@ namespace RoiEditor.Core.Memory
         {
             lock(_lock)
             {
-                if(_cacheMap.TryGetValue(key,out value))
+                if(_nodeMap.TryGetValue(key, out var node))
                 {
-                    //命中！将其移到链表头部 (最近使用)
-                    _lruList.Remove(key);
-                    _lruList.AddFirst(key);
+                    //命中！将其移到链表头部 (最近使用) - O(1)操作
+                    _lruList.Remove(node);
+                    _lruList.AddFirst(node);
+                    value = _valueMap[key];
                     return true;
                 }
             }
@@ -46,26 +50,31 @@ namespace RoiEditor.Core.Memory
         {
             lock(_lock)
             {
-                if(_cacheMap.ContainsKey(key))
+                if(_nodeMap.ContainsKey(key))
                 {
                     //如果已存在，更新值并移到头部
-                    _lruList.Remove(key);
-                    _lruList.AddFirst(key);
-                    _cacheMap[key] = value;
+                    var node = _nodeMap[key];
+                    _lruList.Remove(node);
+                    _lruList.AddFirst(node);
+                    _valueMap[key] = value;
                     return;
                 }
 
                 //如果满了，移除尾部(最久未使用)
-                if(_cacheMap.Count >= _capacity)
+                if(_nodeMap.Count >= _capacity)
                 {
-                    var lastKey = _lruList.Last.Value;
-                    _cacheMap.Remove(lastKey);
+                    var lastNode = _lruList.Last;
+                    var lastKey = lastNode.Value;
+
+                    _nodeMap.Remove(lastKey);
+                    _valueMap.Remove(lastKey);
                     _lruList.RemoveLast();
                 }
 
                 //添加新项到头部
-                _lruList.AddFirst(key);
-                _cacheMap.Add(key,value);
+                var newNode = _lruList.AddFirst(key);
+                _nodeMap.Add(key, newNode);
+                _valueMap.Add(key, value);
             }
         }
 
@@ -74,7 +83,8 @@ namespace RoiEditor.Core.Memory
         {
             lock(_lock)
             {
-                _cacheMap.Clear();
+                _nodeMap.Clear();
+                _valueMap.Clear();
                 _lruList.Clear();
             }
         }
