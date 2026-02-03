@@ -167,8 +167,9 @@ namespace RoiEditor.Controls
         //获取有效区 (代理 MapService)
         public Rect ValidRegion => _mapService.EffectiveRegion;
 
-        // 这是一个动态迭代器，把树状结构“拉平”给内部使用
+        // 这是一个动态迭代器，把树状结构"拉平"给内部使用
         // 这样 RebuildSpatialIndex, RenderStaticLayer 等方法里的 foreach 都不用改逻辑
+        // 【修改】过滤掉 IsVisible=false 的 ROI
         private IEnumerable<ROIRegion> FlatRegions
         {
             get
@@ -176,6 +177,9 @@ namespace RoiEditor.Controls
                 if (ItemsSource == null) yield break;
                 foreach (var roi in ItemsSource)
                 {
+                    // 跳过不可见的 ROI
+                    if (!roi.IsVisible) continue;
+
                     if (roi.Regions != null)
                     {
                         foreach (var region in roi.Regions)
@@ -290,10 +294,10 @@ namespace RoiEditor.Controls
                 // 3. 重新订阅 ItemsSource（内存泄漏修复：先解绑再订阅）
                 if (ItemsSource != null)
                 {
-                    foreach (var item in ItemsSource)
+                    foreach (var roi in ItemsSource)
                     {
-                        item.PropertyChanged -= OnItemPropertyChanged;
-                        item.PropertyChanged += OnItemPropertyChanged;
+                        roi.PropertyChanged -= OnRoiPropertyChanged;
+                        roi.PropertyChanged += OnRoiPropertyChanged;
                     }
                 }
 
@@ -346,6 +350,7 @@ namespace RoiEditor.Controls
                 oldList.CollectionChanged -= c.OnRoiListChanged;
                 foreach (var roi in oldList)
                 {
+                    roi.PropertyChanged -= c.OnRoiPropertyChanged; // 解绑 ROI 属性监听
                     roi.Regions.CollectionChanged -= c.OnSubRegionListChanged;
                     foreach (var r in roi.Regions) r.PropertyChanged -= c.OnItemPropertyChanged;
                 }
@@ -357,6 +362,7 @@ namespace RoiEditor.Controls
                 newList.CollectionChanged += c.OnRoiListChanged;
                 foreach (var roi in newList)
                 {
+                    roi.PropertyChanged += c.OnRoiPropertyChanged; // 监听 ROI 属性（如 IsVisible）
                     roi.Regions.CollectionChanged += c.OnSubRegionListChanged;
                     foreach (var r in roi.Regions) r.PropertyChanged += c.OnItemPropertyChanged;
                 }
@@ -377,6 +383,8 @@ namespace RoiEditor.Controls
             {
                 foreach(ROI roi in e.NewItems)
                 {
+                    //监听 ROI 属性变化（如 IsVisible）
+                    roi.PropertyChanged += OnRoiPropertyChanged;
                     //监听这个新组内部Region的增删
                     roi.Regions.CollectionChanged += OnSubRegionListChanged;
                     //监听这个新组内部Region的属性变化（Points）（内存泄漏修复：先解绑再订阅）
@@ -393,6 +401,7 @@ namespace RoiEditor.Controls
             {
                 foreach(ROI roi in e.OldItems)
                 {
+                    roi.PropertyChanged -= OnRoiPropertyChanged;
                     roi.Regions.CollectionChanged -= OnSubRegionListChanged;
                     foreach(var r in roi.Regions)
                     {
@@ -410,6 +419,20 @@ namespace RoiEditor.Controls
 
             //刷新画面
             RefreshAll();
+        }
+
+        /// <summary>
+        /// ROI 属性变化监听（如 IsVisible）
+        /// </summary>
+        private void OnRoiPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == "IsVisible")
+            {
+                // IsVisible 变化时，需要重建空间索引（因为 FlatRegions 会过滤不可见的 ROI）
+                RebuildSpatialIndex();
+                RenderStaticLayer();
+                RenderEditorLayer();
+            }
         }
 
         /// <summary>
@@ -1688,8 +1711,18 @@ namespace RoiEditor.Controls
             // 9) 退订所有 Item 事件
             if (ItemsSource != null)
             {
-                foreach (var item in ItemsSource)
-                    item.PropertyChanged -= OnItemPropertyChanged;
+                foreach (var roi in ItemsSource)
+                {
+                    roi.PropertyChanged -= OnRoiPropertyChanged;
+                    // 也需要解绑 Region 的事件
+                    if (roi.Regions != null)
+                    {
+                        foreach (var region in roi.Regions)
+                        {
+                            region.PropertyChanged -= OnItemPropertyChanged;
+                        }
+                    }
+                }
             }
         }
 

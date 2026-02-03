@@ -100,6 +100,7 @@ namespace RoiEditor.ViewModels.Component
                     _roiCollection.CollectionChanged -= OnROICollectionChanged;//解绑旧ROI集合的CollectionChanged事件(ROI的增删的时候会触发)
                     foreach (var roi in _roiCollection)
                     {
+                        roi.PropertyChanged -= OnROIPropertyChanged; // 解绑 ROI 属性监听
                         roi.Regions.CollectionChanged -= OnSubRegionsChanged;//解绑旧ROI集合的每一个ROI的Regions的CollectionChanged事件
                         foreach (var r in roi.Regions)
                         {
@@ -116,6 +117,7 @@ namespace RoiEditor.ViewModels.Component
                     _roiCollection.CollectionChanged += OnROICollectionChanged;//绑定新ROI集合的CollectionChanged事件(ROI的增删的时候会触发)
                     foreach (var roi in _roiCollection)
                     {
+                        roi.PropertyChanged += OnROIPropertyChanged; // 监听 ROI 属性（如 IsVisible）
                         roi.Regions.CollectionChanged += OnSubRegionsChanged;//绑定新ROI集合的每一个ROI的Regions的CollectionChanged事件
                         foreach(var r in roi.Regions)
                         {
@@ -250,6 +252,7 @@ namespace RoiEditor.ViewModels.Component
                 ROICollection.CollectionChanged -= OnROICollectionChanged;
                 foreach (var roi in ROICollection)
                 {
+                    roi.PropertyChanged -= OnROIPropertyChanged; // 解绑 ROI 属性监听
                     roi.Regions.CollectionChanged -= OnSubRegionsChanged;
                     foreach (var r in roi.Regions)
                     {
@@ -301,6 +304,8 @@ namespace RoiEditor.ViewModels.Component
             {
                 foreach(ROI roi in e.NewItems)
                 {
+                    //监听 ROI 属性变化（如 IsVisible）
+                    roi.PropertyChanged += OnROIPropertyChanged;
                     //监听新增的ROI内部的Regions的变化
                     roi.Regions.CollectionChanged += OnSubRegionsChanged;
                     //监听新增的ROI内部的Region的属性的变化(Points)（内存泄漏修复：先解绑再订阅）
@@ -317,6 +322,7 @@ namespace RoiEditor.ViewModels.Component
             {
                 foreach(ROI roi in e.OldItems)
                 {
+                    roi.PropertyChanged -= OnROIPropertyChanged;
                     roi.Regions.CollectionChanged -= OnSubRegionsChanged;
                     foreach (var r in roi.Regions) r.PropertyChanged -= OnRegionPropertyChanged;
 
@@ -375,6 +381,16 @@ namespace RoiEditor.ViewModels.Component
             }
         }
 
+        /// <summary>
+        /// ROI 属性变化监听（如 IsVisible）
+        /// 注意：IsVisible 只影响渲染，不影响统计信息，所以这里不需要更新统计
+        /// </summary>
+        private void OnROIPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            // IsVisible 变化时，不需要更新统计信息
+            // 统计信息的更新由 Canvas 负责（重绘时自动触发）
+        }
+
         // 1. 处理选中列表变化 (MySelection)
         private void OnSelectionChanged(object sender, NotifyCollectionChangedEventArgs e)
         {
@@ -423,7 +439,7 @@ namespace RoiEditor.ViewModels.Component
             }
             SelectedAreaInfo = $"Selected Regions: {FormatArea(selArea)}";
 
-            // 2. 计算当前 ActiveROI 的
+            // 2. 计算当前 ActiveROI 的（不受 IsVisible 影响）
             double roiArea = 0;
             if (ActiveROI != null && ActiveROI.Regions != null)
             {
@@ -431,7 +447,7 @@ namespace RoiEditor.ViewModels.Component
             }
             ActiveROIAreaInfo = $"Active ROI: {FormatArea(roiArea)}";
 
-            // 3. 计算全局所有的
+            // 3. 计算全局所有的（不受 IsVisible 影响）
             double totalArea = 0;
             if(ROICollection != null)
             {
